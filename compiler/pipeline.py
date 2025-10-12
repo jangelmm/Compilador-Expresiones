@@ -22,7 +22,7 @@ class CompilationPipeline:
 
         print("Iniciando Fase 1.2: Análisis Sintáctico...")
         syntax_analyzer = SyntaxAnalyzer(list(tokens))
-        _, syntax_report = syntax_analyzer.analyze()
+        ast_root, syntax_report = syntax_analyzer.analyze()
         self.report += syntax_report + "\n---\n"
 
         print("Iniciando Fase 1.3: Análisis Semántico...")
@@ -30,8 +30,10 @@ class CompilationPipeline:
         _, semantic_report = semantic_analizer.analyze()
         self.report += semantic_report + "\n---\n"
 
-        print("Iniciando Fase 3: Generación de Código Intermedio...")
-        icg = IntermediateCodeGenerator(list(tokens))
+        self.report += "\n# Fase 2: Síntesis\n";
+
+        print("Iniciando Fase 2.1: Generación de Código Intermedio...")
+        icg = IntermediateCodeGenerator(ast_root)
         icg_report = icg.generate()
         self.report += icg_report
 

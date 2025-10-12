@@ -101,18 +101,20 @@ graph TD
 ```
 
 ---
+
+# Fase 2: Síntesis
 ## 3. Representación Intermedia
 
 ### Notación Postfija (Polaca Inversa)
-`x := a + b c * + + 1 3`
+`x 1 a + b c * + 3 + :=`
 
 ### Tripletas
 La expresión se traduce en la siguiente secuencia de instrucciones de tres direcciones:
 
 | # | Operador | Operando 1 | Operando 2 |
 |---|----------|------------|------------|
-|(0)| `*`     | `b`     | `c`     |
-|(1)| `+`     | `1`     | `a`     |
-|(2)| `+`     | `(1)`     | `(0)`     |
+|(0)| `+`     | `1`     | `a`     |
+|(1)| `*`     | `b`     | `c`     |
+|(2)| `+`     | `(0)`     | `(1)`     |
 |(3)| `+`     | `(2)`     | `3`     |
-|(4)| `:=`     | `(3)`     | `x`     |
+|(4)| `:=`     | `x`     | `(3)`     |
