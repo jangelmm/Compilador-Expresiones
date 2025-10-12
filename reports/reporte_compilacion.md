@@ -103,6 +103,38 @@ graph TD
 ```
 
 ---
+## 1.3. Análisis Semántico
+
+Se verifica la compatibilidad de tipos recorriendo el AST. Cada nodo se anota con su tipo inferido o con un error.
+
+```mermaid
+graph TD
+    classDef error fill:#ffdddd,stroke:#d44,stroke-width:2px;
+    classDef default fill:#ddffdd,stroke:#4d4,stroke-width:2px;
+    N10["<b>:=</b><br/><i>int</i>"]:::default
+    N0["<b>x</b><br/><i>int</i>"]:::default
+    N10 --> N0
+    N9["<b>+</b><br/><i>int</i>"]:::default
+    N7["<b>+</b><br/><i>int</i>"]:::default
+    N3["<b>+</b><br/><i>int</i>"]:::default
+    N1["<b>1</b><br/><i>int</i>"]:::default
+    N3 --> N1
+    N2["<b>a</b><br/><i>int</i>"]:::default
+    N3 --> N2
+    N7 --> N3
+    N6["<b>*</b><br/><i>int</i>"]:::default
+    N4["<b>b</b><br/><i>int</i>"]:::default
+    N6 --> N4
+    N5["<b>c</b><br/><i>int</i>"]:::default
+    N6 --> N5
+    N7 --> N6
+    N9 --> N7
+    N8["<b>3</b><br/><i>int</i>"]:::default
+    N9 --> N8
+    N10 --> N9
+```
+
+---
 
 # Fase 2: Síntesis
 ## 3. Representación Intermedia
