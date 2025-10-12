@@ -2,7 +2,7 @@
 
 from .lexical_analyzer import LexicalAnalyzer
 from .syntax_analizer import SyntaxAnalyzer
-from .semantic_analizer import SemanticAnalizer
+from .syntactic_checking import SyntacticChecking
 from .intermediate_code_gen import IntermediateCodeGenerator
 
 class CompilationPipeline:
@@ -20,15 +20,17 @@ class CompilationPipeline:
         tokens, lex_report = lex_analyzer.analyze()
         self.report += lex_report + "\n---\n"
 
-        print("Iniciando Fase 1.2: Análisis Sintáctico...")
+        self.report += "\n## Fase 1.2: Análisis Sintáctico\n";
+
+        print("Iniciando Fase 1.2.1: Generación de Árbol de Expresión...")
         syntax_analyzer = SyntaxAnalyzer(list(tokens))
         ast_root, syntax_report = syntax_analyzer.analyze()
         self.report += syntax_report + "\n---\n"
 
-        print("Iniciando Fase 1.3: Análisis Semántico...")
-        semantic_analizer = SemanticAnalizer(list(tokens))
-        _, semantic_report = semantic_analizer.analyze()
-        self.report += semantic_report + "\n---\n"
+        print("Iniciando Fase 1.2.2: Generación de Árbol de Tipos...")
+        sc_analizer = SyntacticChecking(list(tokens))
+        _, sc_report = sc_analizer.analyze()
+        self.report += sc_report + "\n---\n"
 
         self.report += "\n# Fase 2: Síntesis\n";
 

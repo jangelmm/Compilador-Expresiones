@@ -2,7 +2,7 @@
 
 from .structures import Node
 
-class SemanticAnalizer:
+class SyntacticChecking:
     """Construye el árbol de derivación y genera un reporte."""
     def __init__(self, tokens):
         self.tokens = tokens
@@ -98,7 +98,7 @@ class SemanticAnalizer:
 
     def _generate_markdown(self, root_node):
         # (El código de esta función no necesita cambios)
-        md = "## 1.3. Análisis Semántico\n\n"
+        md = "### 1.2.2. Comprobación Sintáctica / Comprobación de Tipos\n\n"
         md += "La secuencia de tokens es válida según la gramática. Se genera el siguiente árbol de derivación:\n\n"
         md += "```mermaid\n"
         md += "graph TD\n"

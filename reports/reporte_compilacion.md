@@ -26,7 +26,9 @@ El código fuente se descompone en los siguientes tokens:
 | NUMERO_ENTERO           | `3`      |
 
 ---
-## 1.2. Análisis Sintáctico (AST)
+
+## Fase 1.2: Análisis Sintáctico
+### 1.2.1. Generación de Árbol de Expresión
 
 La expresión se ha validado y convertido en un Árbol de Sintaxis Abstracta (AST), que representa su estructura operativa.
 
@@ -58,7 +60,7 @@ graph TD
 ```
 
 ---
-## 1.3. Análisis Semántico
+### 1.2.2. Comprobación Sintáctica / Comprobación de Tipos
 
 La secuencia de tokens es válida según la gramática. Se genera el siguiente árbol de derivación:
 
