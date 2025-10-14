@@ -4,6 +4,8 @@
 ProcesoCompilacion
 ├── compiler
 │   ├── __init__.py
+│   ├── declaration_analyzer.py
+│   ├── ejemplo.pas
 │   ├── intermediate_code_gen.py
 │   ├── lexical_analyzer.py
 │   ├── pipeline.py
@@ -17,6 +19,7 @@ ProcesoCompilacion
 │   ├── reporte_flag.md
 │   ├── reporte_message.md
 │   ├── reporte_mixed.md
+│   ├── reporte_prueba.md
 │   ├── reporte_result.md
 │   └── reporte_x.md
 ├── README.md
@@ -30,56 +33,154 @@ ProcesoCompilacion
 
 from compiler.pipeline import CompilationPipeline
 from compiler.symbol_tables import VariableSymbolTable
+import sys
+import os
 
-if __name__ == "__main__":
-    # Ejemplo con diferentes tipos
-    expressions = [
-        # "x := 1 + a + (b * c) + 3",  # Enteros
-        # "result := 3.14 * radius + 2.5",  # Reales
-        # "message := 'Hola ' + 'Mundo'",  # Strings
-        # "flag := (x > 5) and (y < 10)",  # Booleanos
-        # "mixed := 10 + 3.14"  # Mixed types
-    ]
+def compile_pascal_file(file_path):
+    """Compila un archivo Pascal completo"""
+    print(f"\n{'='*60}")
+    print(f"COMPILANDO ARCHIVO PASCAL: {file_path}")
+    print(f"{'='*60}")
     
-    for expression in expressions:
-        print(f"\n{'='*50}")
-        print(f"Compilando: {expression}")
-        print(f"{'='*50}")
+    try:
+        with open(file_path, 'r', encoding='utf-8') as f:
+            code = f.read()
         
+        # Inicializar tabla de símbolos VACÍA - se llenará con las declaraciones
         symbol_table = VariableSymbolTable()
         
-        # Definir símbolos según la expresión
-        if "message :=" in expression:
-            symbol_table.add_symbol('message', 'string')
-        elif "result :=" in expression:
-            symbol_table.add_symbol('result', 'real')
-            symbol_table.add_symbol('radius', 'real')
-        elif "flag :=" in expression:
-            symbol_table.add_symbol('flag', 'boolean')
-            symbol_table.add_symbol('x', 'integer')
-            symbol_table.add_symbol('y', 'integer')
-        elif "mixed :=" in expression:
-            symbol_table.add_symbol('mixed', 'real')
-        else:
-            # Default: enteros
-            symbol_table.add_symbol('x', 'integer')
-            symbol_table.add_symbol('a', 'integer')
-            symbol_table.add_symbol('b', 'integer') 
-            symbol_table.add_symbol('c', 'integer')
+        pipeline = CompilationPipeline(code, symbol_table)
+        pipeline.run()
         
-        pipeline = CompilationPipeline(expression, symbol_table)
+        # Guardar reporte con nombre del archivo
+        base_name = os.path.splitext(os.path.basename(file_path))[0]
+        report_name = f"reports/reporte_{base_name}.md"
+        pipeline.save_report(report_name)
+        
+        print(f"  Compilación exitosa: {file_path}")
+        print(f"  Reporte guardado en: {report_name}")
+        
+    except Exception as e:
+        print(f"  ERROR durante la compilación: {e}")
+
+if __name__ == "__main__":
+    if len(sys.argv) > 1:
+        # Modo archivo: python main.py archivo.pas
+        file_path = sys.argv[1]
+        compile_pascal_file(file_path)
+    else:
+        # Modo de prueba con código Pascal completo
+        pascal_code = """
+        program Prueba;
+        var
+          x, y : integer;
+          flag : boolean;
+        
+        begin
+          x := 10;
+          y := 5;
+          flag := (x > 5) and (y < 10);
+        end.
+        """
+        
+        print("Modo de prueba: Compilando código Pascal de ejemplo")
+        symbol_table = VariableSymbolTable()
         
         try:
+            pipeline = CompilationPipeline(pascal_code, symbol_table)
             pipeline.run()
-            pipeline.save_report(f"reports/reporte_{expression.split()[0]}.md")
-            print(f" Compilación exitosa para: {expression}")
-        except ValueError as e:
-            print(f" ERROR: {e}")```
+            pipeline.save_report("reports/reporte_prueba.md")
+            print("  Compilación de prueba exitosa!")
+        except Exception as e:
+            print(f" Error en compilación de prueba: {e}")```
 
 ## `compiler\__init__.py`
 
 ```python
 ```
+
+## `compiler\declaration_analyzer.py`
+
+```python
+# compiler/declaration_analyzer.py
+
+import re
+from .symbol_tables import VariableSymbolTable
+
+class DeclarationAnalyzer:
+    """
+    Analiza la sección de declaraciones de variables (bloque VAR) 
+    y construye la tabla de símbolos variables.
+    """
+    
+    def __init__(self, symbol_table=None):
+        self.symbol_table = symbol_table if symbol_table is not None else VariableSymbolTable()
+    
+    def analyze_declarations(self, code_string):
+        """
+        Analiza el código y extrae las declaraciones de variables del bloque VAR.
+        Retorna la tabla de símbolos variables actualizada.
+        """
+        # Limpiar el código: eliminar comentarios y normalizar espacios
+        clean_code = self._clean_code(code_string)
+        
+        # Buscar el bloque VAR
+        var_pattern = r'\bvar\b(.*?)(?:\bbegin\b|\bend\b|\bprocedure\b|\bfunction\b|$)'
+        var_match = re.search(var_pattern, clean_code, re.IGNORECASE | re.DOTALL)
+        
+        if not var_match:
+            return self.symbol_table  # No hay declaraciones
+        
+        var_section = var_match.group(1)
+        
+        # Dividir por líneas y procesar cada declaración
+        lines = var_section.split(';')
+        
+        for line in lines:
+            line = line.strip()
+            if not line:
+                continue
+                
+            # Buscar patrones: "variable : tipo" o "variable1, variable2 : tipo"
+            if ':' in line:
+                # Separar la parte de variables y el tipo
+                vars_part, type_part = line.split(':', 1)
+                var_type = type_part.strip().lower()
+                
+                # Separar variables por comas
+                variables = [v.strip() for v in vars_part.split(',')]
+                
+                for var_name in variables:
+                    if var_name:  # Asegurarse que no esté vacío
+                        self.symbol_table.add_symbol(var_name, var_type)
+        
+        return self.symbol_table
+    
+    def _clean_code(self, code_string):
+        """Limpia el código removiendo comentarios y espacios extras."""
+        # Remover comentarios de una línea { ... }
+        code_string = re.sub(r'\{[^}]*\}', '', code_string)
+        # Remover comentarios de una línea (* ... *)
+        code_string = re.sub(r'\(\*[^*]*\*\)', '', code_string)
+        # Normalizar espacios
+        code_string = re.sub(r'\s+', ' ', code_string)
+        return code_string
+    
+    def get_undeclared_variables(self, tokens):
+        """
+        Verifica si hay variables usadas pero no declaradas.
+        Retorna lista de variables no declaradas.
+        """
+        declared_vars = {info['name'] for info in self.symbol_table.symbols.values()}
+        used_vars = set()
+        
+        for token_type, value, table_id in tokens:
+            # Solo considerar IDENTIFIER que están marcados como UNDECLARED
+            # Ignorar PROGRAM_NAME y otros tipos de tokens
+            if token_type == 'IDENTIFIER' and table_id == 'UNDECLARED':
+                used_vars.add(value.lower())
+        
+        return used_vars```
 
 ## `compiler\intermediate_code_gen.py`
 
@@ -157,116 +258,155 @@ class IntermediateCodeGenerator:
 # compiler/lexical_analyzer.py
 
 import re
-from .symbol_tables import RESERVED_WORDS, OPERATORS, DELIMITERS, VariableSymbolTable
+from .symbol_tables import RESERVED_WORDS, OPERATORS, DELIMITERS
 
 class LexicalAnalyzer:
     """
-    Convierte una cadena de código fuente en tokens usando tablas fijas y variables.
+    Convierte una cadena de código fuente en tokens usando las tablas fijas y variables.
     """
+
+    # En lexical_analyzer.py, actualizar TOKEN_SPECIFICATIONS:
     TOKEN_SPECIFICATIONS = [
-        ('KEYWORD_VAR',         r'\bvar\b'),
-        ('KEYWORD_PROC',        r'\bproc\b'),
-        ('KEYWORD_BEGIN',       r'\bbegin\b'),
-        ('KEYWORD_END',         r'\bend\b'),
-        ('TIPO_DATO',           r'\b(integer|char|real)\b'),
-        ('STRING',              r"'[^']*'"),  # Strings entre comillas simples
-        ('ID',                  r'[a-zA-Z_]\w*'),
-        ('NUMERO_REAL',         r'\d+\.\d*|\.\d+'),  # Números reales (1.23, .5, 3.)
-        ('NUMERO_ENTERO',       r'\d+'),
-        ('OPERADOR_ASIGNACION', r':='),
-        ('OPERADOR_ARITMETICO', r'[+\-*/]'),
-        ('OPERADOR_COMPARACION', r'[<>]=?|='),  # <, >, <=, >=, =
-        ('OPERADOR_DESIGUALDAD', r'<>'),        # <>
-        ('OPERADOR_LOGICO',     r'\b(and|or|not)\b'),  # ACTUALIZADO: agregar 'not'
-        ('DELIMITADOR',         r'[:;]'),
-        ('PAREN',               r'[()]'),
-        ('SKIP',                r'[ \t\r\n]+'),
-        ('MISMATCH',            r'.'),
+        ('RESERVED_WORD',    r'\b(var|proc|begin|end|integer|char|real|program|boolean|string)\b'),
+        ('OPERATOR',         r':=|[+\-*/]|[<>]=?|<>|\b(and|or|not)\b'),
+        ('DELIMITER',        r'[;]'),  # Solo punto y coma como delimitador de sentencias
+        ('COLON',            r':'),    # Separar los dos puntos
+        ('COMMA',            r','),    # Separar las comas
+        ('PAREN',            r'[()]'),
+        ('DOT',              r'\.'),
+        ('STRING',           r"'[^']*'"),
+        ('NUMBER_REAL',      r'\d+\.\d*|\.\d+'),
+        ('NUMBER_INTEGER',   r'\d+'),
+        ('IDENTIFIER',       r'[a-zA-Z_]\w*'),
+        ('SKIP',             r'[ \t\r\n]+'),
+        ('MISMATCH',         r'.'),
     ]
 
     TOKEN_REGEX = '|'.join('(?P<%s>%s)' % pair for pair in TOKEN_SPECIFICATIONS)
 
-    def __init__(self, code_string, symbol_table=None):
+    def __init__(self, code_string, symbol_table):
         self.code = code_string
+        self.symbol_table = symbol_table
         self.tokens = []
-        self.symbol_table = symbol_table if symbol_table is not None else VariableSymbolTable()
+        self.program_name = None  # Nuevo: almacenar el nombre del programa
 
     def analyze(self):
-        """Realiza el análisis y devuelve los tokens y el reporte."""
+        """Realiza el análisis léxico y devuelve los tokens y el reporte."""
         self._tokenize()
         report = self._generate_markdown()
         return self.tokens, report
 
     def _tokenize(self):
-        """Genera una lista de tokens a partir del código fuente."""
-        for mo in re.finditer(self.TOKEN_REGEX, self.code, re.IGNORECASE):
-            kind = mo.lastgroup
-            value = mo.group()
-
-            if kind == 'SKIP':
-                continue
-            elif kind == 'MISMATCH':
-                raise ValueError(f"Caracter no reconocido: '{value}'")
+        """Genera tokens usando las tablas fijas y variables."""
+        lines = self.code.split('\n')
+        in_program_declaration = False
+        
+        for line in lines:
+            # Buscar declaración de programa para extraer el nombre
+            program_match = re.search(r'\bprogram\s+(\w+)\s*;', line, re.IGNORECASE)
+            if program_match:
+                self.program_name = program_match.group(1).lower()
+                in_program_declaration = True
             
-            # Procesar según el tipo de token
-            if kind in ['KEYWORD_VAR', 'KEYWORD_PROC', 'KEYWORD_BEGIN', 'KEYWORD_END', 'TIPO_DATO']:
-                value = value.lower()
-                token_id = RESERVED_WORDS.get(value)
-                self.tokens.append(('RESERVED_WORD', value, token_id))
+            # Tokenizar la línea
+            for mo in re.finditer(self.TOKEN_REGEX, line, re.IGNORECASE):
+                kind = mo.lastgroup
+                value = mo.group()
+
+                if kind == 'SKIP':
+                    continue
+                elif kind == 'MISMATCH':
+                    raise ValueError(f"Carácter no reconocido: '{value}'")
+                
+                # Convertir a minúsculas solo para palabras reservadas e identificadores
+                if kind in ['RESERVED_WORD', 'IDENTIFIER']:
+                    value = value.lower()
+                
+                # Determinar el tipo de token usando las tablas
+                token_info = self._classify_token(kind, value)
+                self.tokens.append(token_info)
             
-            elif kind in ['OPERADOR_ASIGNACION', 'OPERADOR_ARITMETICO', 'OPERADOR_COMPARACION', 'OPERADOR_DESIGUALDAD']:
-                token_id = OPERATORS.get(value)
-                self.tokens.append(('OPERATOR', value, token_id))
+            # Resetear el flag después de procesar la línea con 'program'
+            if in_program_declaration:
+                in_program_declaration = False
 
-            elif kind == 'OPERADOR_LOGICO':  # Manejar operadores lógicos
-                token_id = OPERATORS.get(value)
-                self.tokens.append(('OPERATOR', value, token_id))
-
-            elif kind == 'DELIMITADOR':
-                token_id = DELIMITERS.get(value)
-                self.tokens.append(('DELIMITER', value, token_id))
-
-            elif kind == 'PAREN':
-                self.tokens.append(('PAREN', value, None))
-
-            elif kind == 'NUMERO_ENTERO':
-                self.tokens.append(('CONSTANT', value, None))
-
-            elif kind == 'NUMERO_REAL':
-                self.tokens.append(('CONSTANT', value, None))
-
-            elif kind == 'STRING':
-                self.tokens.append(('STRING', value, None))
-
-            elif kind == 'ID':
-                # Verificar si el símbolo ya existe en la tabla
-                symbol_exists = False
-                for symbol_id, symbol_info in self.symbol_table.symbols.items():
-                    if symbol_info['name'] == value:
-                        symbol_exists = True
-                        break
-                
-                if not symbol_exists:
-                    # Solo agregar si no existe, usando tipo por defecto
-                    symbol_type = 'integer'
-                    self.symbol_table.add_symbol(value, symbol_type)
-                
-                # Buscar el ID del símbolo (ya sea existente o nuevo)
-                symbol_id = None
-                for sid, info in self.symbol_table.symbols.items():
-                    if info['name'] == value:
-                        symbol_id = sid
-                        break
-                
-                self.tokens.append(('IDENTIFIER', value, symbol_id))
+    def _classify_token(self, kind, value):
+        """
+        Clasifica un token usando las tablas fijas y variables.
+        Retorna: (tipo_token, lexema, id_tabla)
+        """
+        # 1. Primero buscar en tabla fija de palabras reservadas
+        if kind == 'RESERVED_WORD':
+            token_id = RESERVED_WORDS.get(value.lower())
+            return ('RESERVED_WORD', value, token_id)
+        
+        # 2. Buscar en tabla de operadores
+        elif kind == 'OPERATOR':
+            token_id = OPERATORS.get(value)
+            if token_id:
+                return ('OPERATOR', value, token_id)
+        
+        # 3. Buscar en tabla de delimitadores
+        elif kind == 'DELIMITER':
+            token_id = DELIMITERS.get(value)
+            if token_id:
+                return ('DELIMITER', value, token_id)
+        
+        # 4. Dos puntos (para declaraciones de tipo)
+        elif kind == 'COLON':
+            return ('COLON', value, None)
+        
+        # 5. Coma (para separar variables)
+        elif kind == 'COMMA':
+            return ('COMMA', value, None)
+        
+        # 6. Punto (delimitador especial)
+        elif kind == 'DOT':
+            token_id = DELIMITERS.get(value)
+            if token_id:
+                return ('DELIMITER', value, token_id)
+        
+        # 7. Paréntesis
+        elif kind == 'PAREN':
+            return ('PAREN', value, None)
+        
+        # 8. Constantes numéricas
+        elif kind in ['NUMBER_INTEGER', 'NUMBER_REAL']:
+            return ('CONSTANT', value, None)
+        
+        # 9. Strings
+        elif kind == 'STRING':
+            return ('STRING', value, None)
+        
+        # 10. Identificadores - BUSCAR en tabla de símbolos variables
+        elif kind == 'IDENTIFIER':
+            # EXCEPCIÓN: Ignorar el nombre del programa
+            if self.program_name and value.lower() == self.program_name:
+                return ('PROGRAM_NAME', value, 'PROGRAM')
+            
+            # Buscar el símbolo en la tabla de variables
+            symbol_id = None
+            for sid, info in self.symbol_table.symbols.items():
+                if info['name'] == value.lower():
+                    symbol_id = sid
+                    break
+            
+            if symbol_id is not None:
+                return ('IDENTIFIER', value, symbol_id)
+            else:
+                # Variable no declarada - aún así creamos el token pero marcamos como no declarada
+                return ('IDENTIFIER', value, 'UNDECLARED')
+        
+        # Si llegamos aquí, es un token no clasificado
+        return ('UNKNOWN', value, None)
 
     def _generate_markdown(self):
         md = "## 1.1. Análisis Lexicográfico\n\n"
         md += "El código fuente se descompone en los siguientes tokens:\n\n"
-        md += "| Tipo | Valor | ID |\n"
-        md += "|------|-------|----|\n"
-        for kind, value, token_id in self.tokens:
-            md += f"| {kind} | `{value}` | {token_id} |\n"
+        md += "| Token | Lexema | ID Tabla |\n"
+        md += "|-------|--------|----------|\n"
+        for token_type, lexema, table_id in self.tokens:
+            md += f"| {token_type} | `{lexema}` | {table_id} |\n"
         return md```
 
 ## `compiler\pipeline.py`
@@ -279,51 +419,132 @@ from .syntax_analizer import SyntaxAnalyzer
 from .syntactic_checking import SyntacticChecking
 from .semantic_analyzer import SemanticAnalyzer
 from .intermediate_code_gen import IntermediateCodeGenerator
+from .declaration_analyzer import DeclarationAnalyzer
 from .symbol_tables import generate_fixed_tables_report
 
 class CompilationPipeline:
-    def __init__(self, expression, symbol_table=None):
-        self.expression = expression
+    def __init__(self, code_string, symbol_table=None):
+        self.code = code_string
         self.symbol_table = symbol_table
-        self.report = f"# Reporte de Compilación para la Expresión\n\n`{expression}`\n\n---\n"
+        self.report = f"# Reporte de Compilación\n\n```pascal\n{code_string}\n```\n\n---\n"
 
     def run(self):
+        """Ejecuta el pipeline completo de compilación."""
+        
+        # FASE 0: Análisis de Declaraciones (CREA la tabla de símbolos variables)
+        self.report += "\n# Fase 0: Análisis de Declaraciones\n"
+        print("Iniciando Fase 0: Análisis de Declaraciones...")
+        
+        declaration_analyzer = DeclarationAnalyzer(self.symbol_table)
+        self.symbol_table = declaration_analyzer.analyze_declarations(self.code)
+        
+        self.report += "\n## Tabla de Símbolos Variables (Declaradas)\n\n"
+        self.report += self.symbol_table.generate_markdown_report() + "\n---\n"
+
+        # FASE 1: Análisis
         self.report += "\n# Fase 1: Análisis\n"
 
         print("Iniciando Fase 1.1: Análisis Lexicográfico...")
-        # MODIFICACIÓN: Pasar la tabla de símbolos al LexicalAnalyzer si existe
-        lex_analyzer = LexicalAnalyzer(self.expression, self.symbol_table)
+        lex_analyzer = LexicalAnalyzer(self.code, self.symbol_table)
         tokens, lex_report = lex_analyzer.analyze()
         self.report += lex_report + "\n---\n"
 
-        # AGREGAR reportes de tablas
-        self.report += generate_fixed_tables_report() + "\n"
-        self.report += lex_analyzer.symbol_table.generate_markdown_report() + "\n---\n"
+        # Verificar variables no declaradas
+        undeclared = declaration_analyzer.get_undeclared_variables(tokens)
+        if undeclared:
+            self.report += "\n## Variables No Declaradas\n\n"
+            for var in undeclared:
+                self.report += f"- `{var}`\n"
+            self.report += "\n---\n"
+            raise ValueError(f"Variables no declaradas: {', '.join(undeclared)}")
+
+        # AGREGAR reportes de tablas fijas
+        self.report += generate_fixed_tables_report() + "\n---\n"
+
+        # Extraer solo las sentencias ejecutables (después del 'begin')
+        executable_tokens = self._extract_executable_tokens(tokens)
+        
+        if not executable_tokens:
+            raise ValueError("No se encontraron sentencias ejecutables después del 'begin'")
 
         self.report += "\n## Fase 1.2: Análisis Sintáctico\n"
 
-        print("Iniciando Fase 1.2.1: Generación de Árbol de Expresión...")
-        syntax_tokens = [(kind, value) for kind, value, _ in tokens]
-        syntax_analyzer = SyntaxAnalyzer(syntax_tokens)
-        ast_root, syntax_report = syntax_analyzer.analyze()
-        self.report += syntax_report + "\n---\n"
+        # Procesar cada sentencia por separado
+        for i, stmt_tokens in enumerate(executable_tokens):
+            self.report += f"\n### Sentencia {i+1}\n"
+            
+            print(f"Iniciando Fase 1.2.1: Generación de Árbol de Expresión para sentencia {i+1}...")
+            syntax_tokens = [(kind, value) for kind, value, _ in stmt_tokens]
+            syntax_analyzer = SyntaxAnalyzer(syntax_tokens)
+            ast_root, syntax_report = syntax_analyzer.analyze()
+            self.report += syntax_report + "\n---\n"
 
-        print("Iniciando Fase 1.2.2: Comprobación Sintáctica (Árbol de Derivación)...")
-        sc_analizer = SyntacticChecking(syntax_tokens)
-        parse_tree, sc_report = sc_analizer.analyze()
-        self.report += sc_report + "\n---\n"
+            print(f"Iniciando Fase 1.2.2: Comprobación Sintáctica para sentencia {i+1}...")
+            sc_analizer = SyntacticChecking(syntax_tokens)
+            parse_tree, sc_report = sc_analizer.analyze()
+            self.report += sc_report + "\n---\n"
 
-        print("Iniciando Fase 1.3: Análisis Semántico...")
-        semantic_analyzer = SemanticAnalyzer(ast_root, lex_analyzer.symbol_table)
-        annotated_ast, semantic_report = semantic_analyzer.analyze()
-        self.report += semantic_report + "\n---\n"
+            print(f"Iniciando Fase 1.3: Análisis Semántico para sentencia {i+1}...")
+            semantic_analyzer = SemanticAnalyzer(ast_root, self.symbol_table)
+            annotated_ast, semantic_report = semantic_analyzer.analyze()
+            self.report += semantic_report + "\n---\n"
 
-        self.report += "\n# Fase 2: Síntesis\n"
+            self.report += "\n# Fase 2: Síntesis\n"
 
-        print("Iniciando Fase 2.1: Generación de Código Intermedio...")
-        icg = IntermediateCodeGenerator(annotated_ast)
-        icg_report = icg.generate()
-        self.report += icg_report
+            print(f"Iniciando Fase 2.1: Generación de Código Intermedio para sentencia {i+1}...")
+            icg = IntermediateCodeGenerator(annotated_ast)
+            icg_report = icg.generate()
+            self.report += icg_report
+
+    def _extract_executable_tokens(self, tokens):
+        """
+        Extrae las sentencias ejecutables del bloque BEGIN-END.
+        Retorna una lista de listas de tokens, donde cada lista interna es una sentencia.
+        """
+        # Encontrar el inicio del bloque BEGIN
+        begin_index = -1
+        for i, (token_type, value, _) in enumerate(tokens):
+            if token_type == 'RESERVED_WORD' and value.lower() == 'begin':
+                begin_index = i + 1
+                break
+        
+        if begin_index == -1:
+            return []
+        
+        # Encontrar el final del bloque END
+        end_index = -1
+        for i in range(begin_index, len(tokens)):
+            token_type, value, _ = tokens[i]
+            if token_type == 'RESERVED_WORD' and value.lower() == 'end':
+                end_index = i
+                break
+        
+        if end_index == -1:
+            end_index = len(tokens)
+        
+        # Extraer tokens entre BEGIN y END
+        executable_tokens = tokens[begin_index:end_index]
+        
+        # Dividir en sentencias individuales (separadas por ';')
+        statements = []
+        current_statement = []
+        
+        for token in executable_tokens:
+            token_type, value, table_id = token
+            
+            # Si encontramos un punto y coma, terminar la sentencia actual
+            if token_type == 'DELIMITER' and value == ';':
+                if current_statement:  # Solo agregar si hay tokens
+                    statements.append(current_statement)
+                    current_statement = []
+            else:
+                current_statement.append(token)
+        
+        # Agregar la última sentencia si existe
+        if current_statement:
+            statements.append(current_statement)
+        
+        return statements
 
     def save_report(self, filename="reports/reporte_compilacion.md"):
         import os
@@ -355,95 +576,101 @@ class SemanticAnalyzer:
         report = self._generate_markdown()
         return self.ast_root, report
 
-    def _annotate_tree(self, node: Node):
-        """
-        Recorre el árbol (post-orden) para asignar y verificar tipos.
-        """
-        if not node:
-            return
+    # compiler/semantic_analyzer.py
 
-        # Si es una hoja (operando)
-        if not node.left and not node.right:
-            # Detección de tipos (código existente)
-            if node.value.isdigit():
-                node.type = 'integer'
-                node.addressing_mode = 'immediate'
-            elif (node.value.replace('.', '').replace('-', '').isdigit() and 
-                  node.value.count('.') == 1 and
-                  (node.value[0] == '-' or node.value[0].isdigit())):
-                node.type = 'real'
-                node.addressing_mode = 'immediate'
-            elif node.value in ['true', 'false']:
-                node.type = 'boolean'
-                node.addressing_mode = 'immediate'
-            elif node.value.startswith("'") and node.value.endswith("'"):
-                node.type = 'char'
-                node.addressing_mode = 'immediate'
-            elif node.value.startswith('"') and node.value.endswith('"'):
-                node.type = 'string'
-                node.addressing_mode = 'immediate'
-            else:
-                # Buscar en tabla de símbolos variables
-                symbol = self.symbol_table.find_symbol_by_name(node.value)
-                if symbol:
-                    node.type = symbol.type
-                    node.addressing_mode = symbol.mode
-                    node.memory_address = symbol.address
-                else:
-                    node.type = f'ERROR: Variable \'{node.value}\' no declarada'
-                    node.addressing_mode = 'error'
-                    self.errors.append(node.type)
-            return
+def _annotate_tree(self, node: Node):
+    """
+    Recorre el árbol (post-orden) para asignar y verificar tipos.
+    """
+    if not node:
+        return
 
-        # Recorrer recursivamente los hijos primero
-        self._annotate_tree(node.left)
-        if node.right:  # Solo si existe hijo derecho (operadores binarios)
-            self._annotate_tree(node.right)
-
-        # --- Verificación de tipos usando el sistema de tipos ---
-        op = node.value
-        
-        # Manejar operador unario 'not'
-        if op == 'not':
-            if not node.left:
-                node.type = 'ERROR: Operador unario "not" requiere un operando'
-                self.errors.append(node.type)
-                return
-                
-            operand_type = node.left.type
-            if operand_type == 'boolean':
-                node.type = 'boolean'
-            else:
-                node.type = f'ERROR: Operador "not" no puede aplicarse a {operand_type}'
-                self.errors.append(node.type)
-            
-            node.addressing_mode = 'register'
-            return
-
-        # Para operadores binarios
-        left_type = node.left.type if node.left else None
-        right_type = node.right.type if node.right else None
-
-        # Usar el sistema de tipos para determinar el tipo resultante
-        result_type = TypeSystem.get_result_type(op, left_type, right_type)
-        
-        if result_type:
-            node.type = result_type
+    # Si es una hoja (operando)
+    if not node.left and not node.right:
+        # Detección de tipos y modos de direccionamiento
+        if node.value.isdigit():
+            node.type = 'integer'
+            node.addressing_mode = 'immediate'  # Valor inmediato
+        elif (node.value.replace('.', '').replace('-', '').isdigit() and 
+              node.value.count('.') == 1 and
+              (node.value[0] == '-' or node.value[0].isdigit())):
+            node.type = 'real'
+            node.addressing_mode = 'immediate'  # Valor inmediato
+        elif node.value in ['true', 'false']:
+            node.type = 'boolean'
+            node.addressing_mode = 'immediate'  # Valor inmediato
+        elif node.value.startswith("'") and node.value.endswith("'"):
+            node.type = 'char'
+            node.addressing_mode = 'immediate'  # Valor inmediato
+        elif node.value.startswith('"') and node.value.endswith('"'):
+            node.type = 'string'
+            node.addressing_mode = 'immediate'  # Valor inmediato
         else:
-            node.type = f'ERROR: Operación \'{op}\' no permitida entre {left_type} y {right_type}'
-            self.errors.append(node.type)
-
-        # --- Determinación de modo de direccionamiento ---
-        if node.value in ['+', '-', '*', '/', '=', '<>', '<', '>', '<=', '>=', 'and', 'or']:
-            node.addressing_mode = 'register'
-        elif node.value == ':=':
-            # Verificar compatibilidad de asignación
-            if not TypeSystem.can_convert(right_type, left_type) and not 'ERROR' in left_type and not 'ERROR' in right_type:
-                node.type = f'ERROR: No se puede asignar {right_type} a {left_type}'
+            # Buscar en tabla de símbolos variables
+            symbol = self.symbol_table.find_symbol_by_name(node.value)
+            if symbol:
+                node.type = symbol.type
+                node.addressing_mode = 'direct'  # ← Variables: acceso directo a memoria
+                node.memory_address = symbol.address
+            else:
+                node.type = f'ERROR: Variable \'{node.value}\' no declarada'
+                node.addressing_mode = 'error'
                 self.errors.append(node.type)
-            node.addressing_mode = 'direct'
-        elif not hasattr(node, 'addressing_mode'):
-            node.addressing_mode = 'direct'
+        return
+
+    # Recorrer recursivamente los hijos primero
+    self._annotate_tree(node.left)
+    if node.right:
+        self._annotate_tree(node.right)
+
+    # --- Verificación de tipos usando el sistema de tipos ---
+    op = node.value
+    
+    # Manejar operador unario 'not'
+    if op == 'not':
+        if not node.left:
+            node.type = 'ERROR: Operador unario "not" requiere un operando'
+            self.errors.append(node.type)
+            return
+            
+        operand_type = node.left.type
+        if operand_type == 'boolean':
+            node.type = 'boolean'
+        else:
+            node.type = f'ERROR: Operador "not" no puede aplicarse a {operand_type}'
+            self.errors.append(node.type)
+        
+        node.addressing_mode = 'register'  # Resultado en registro
+        return
+
+    # Para operadores binarios
+    left_type = node.left.type if node.left else None
+    right_type = node.right.type if node.right else None
+
+    # Usar el sistema de tipos para determinar el tipo resultante
+    result_type = TypeSystem.get_result_type(op, left_type, right_type)
+    
+    if result_type:
+        node.type = result_type
+    else:
+        node.type = f'ERROR: Operación \'{op}\' no permitida entre {left_type} y {right_type}'
+        self.errors.append(node.type)
+
+    # --- Determinación de modo de direccionamiento MEJORADA ---
+    if node.value in ['+', '-', '*', '/', '=', '<>', '<', '>', '<=', '>=', 'and', 'or']:
+        # Operaciones aritméticas, comparación y lógicas: resultado en registro
+        node.addressing_mode = 'register'
+    elif node.value == ':=':
+        # Asignación: modo directo (escritura a memoria)
+        node.addressing_mode = 'direct'
+        
+        # Verificar compatibilidad de asignación
+        if not TypeSystem.can_convert(right_type, left_type) and not 'ERROR' in left_type and not 'ERROR' in right_type:
+            node.type = f'ERROR: No se puede asignar {right_type} a {left_type}'
+            self.errors.append(node.type)
+    else:
+        # Por defecto: modo directo
+        node.addressing_mode = 'direct'
 
     # ... (el resto del código se mantiene igual)
     def _generate_markdown(self):
@@ -541,7 +768,7 @@ class Node:
 # Tablas Fijas
 RESERVED_WORDS = {
     'var': 1, 'proc': 2, 'begin': 3, 'end': 4, 
-    'integer': 5, 'char': 6, 'real': 7
+    'integer': 5, 'char': 6, 'real': 7, 'program': 8, 'boolean': 9, 'string': 10
 }
 
 OPERATORS = {
@@ -552,7 +779,7 @@ OPERATORS = {
 }
 
 DELIMITERS = {
-    ':': 201, ';': 202, '(': 203, ')': 204
+    ':': 201, ';': 202, '(': 203, ')': 204, ',': 205, '.': 206
 }
 
 
@@ -572,7 +799,7 @@ class VariableSymbolTable:
             'value': value,
             'scope': scope,
             'address': f"{self.address_counter:04X}",
-            'mode': 'direct'  # Modo de direccionamiento
+            
         }
         self.address_counter += 4  # Incremento para siguiente símbolo
         return symbol_id
@@ -583,19 +810,19 @@ class VariableSymbolTable:
 
     def generate_markdown_report(self):
         md = "## Tabla de Símbolos Variables\n\n"
-        md += "| ID | Nombre | Tipo | Scope | Dirección | Modo |\n"
-        md += "|----|--------|------|-------|-----------|------|\n"
+        md += "| ID | Nombre | Tipo | Scope | Dirección |\n"  # ← Quitar columna Modo
+        md += "|----|--------|------|-------|-----------|\n"
         
         for symbol_id, info in self.symbols.items():
             md += f"| {symbol_id} | {info['name']} | {info['type']} | "
-            md += f"{info['scope']} | {info['address']} | {info['mode']} |\n"
+            md += f"{info['scope']} | {info['address']} |\n"  # ← Quitar modo
         
-        # Agregar resumen
         md += f"\n**Total de símbolos:** {len(self.symbols)}\n"
         md += f"**Siguiente dirección disponible:** {self.address_counter:04X}\n"
         
         return md
     
+    # En symbol_tables.py - método find_symbol_by_name
     def find_symbol_by_name(self, name):
         """
         Busca un símbolo por nombre en la tabla.
@@ -603,13 +830,12 @@ class VariableSymbolTable:
         """
         for symbol_id, symbol_info in self.symbols.items():
             if symbol_info['name'] == name:
-                # Crear un objeto simple con los atributos necesarios
                 class Symbol:
                     pass
                 symbol = Symbol()
                 symbol.type = symbol_info['type']
-                symbol.mode = symbol_info['mode']
                 symbol.address = symbol_info['address']
+                # QUITAR: symbol.mode = symbol_info['mode']  ← Ya no tiene modo fijo
                 return symbol
         return None
 

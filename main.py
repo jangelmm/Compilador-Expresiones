@@ -2,48 +2,63 @@
 
 from compiler.pipeline import CompilationPipeline
 from compiler.symbol_tables import VariableSymbolTable
+import sys
+import os
 
-if __name__ == "__main__":
-    # Ejemplo con diferentes tipos
-    expressions = [
-        # "x := 1 + a + (b * c) + 3",  # Enteros
-        # "result := 3.14 * radius + 2.5",  # Reales
-        # "message := 'Hola ' + 'Mundo'",  # Strings
-        # "flag := (x > 5) and (y < 10)",  # Booleanos
-        # "mixed := 10 + 3.14"  # Mixed types
-    ]
+def compile_pascal_file(file_path):
+    """Compila un archivo Pascal completo"""
+    print(f"\n{'='*60}")
+    print(f"COMPILANDO ARCHIVO PASCAL: {file_path}")
+    print(f"{'='*60}")
     
-    for expression in expressions:
-        print(f"\n{'='*50}")
-        print(f"Compilando: {expression}")
-        print(f"{'='*50}")
+    try:
+        with open(file_path, 'r', encoding='utf-8') as f:
+            code = f.read()
         
+        # Inicializar tabla de símbolos VACÍA - se llenará con las declaraciones
         symbol_table = VariableSymbolTable()
         
-        # Definir símbolos según la expresión
-        if "message :=" in expression:
-            symbol_table.add_symbol('message', 'string')
-        elif "result :=" in expression:
-            symbol_table.add_symbol('result', 'real')
-            symbol_table.add_symbol('radius', 'real')
-        elif "flag :=" in expression:
-            symbol_table.add_symbol('flag', 'boolean')
-            symbol_table.add_symbol('x', 'integer')
-            symbol_table.add_symbol('y', 'integer')
-        elif "mixed :=" in expression:
-            symbol_table.add_symbol('mixed', 'real')
-        else:
-            # Default: enteros
-            symbol_table.add_symbol('x', 'integer')
-            symbol_table.add_symbol('a', 'integer')
-            symbol_table.add_symbol('b', 'integer') 
-            symbol_table.add_symbol('c', 'integer')
+        pipeline = CompilationPipeline(code, symbol_table)
+        pipeline.run()
         
-        pipeline = CompilationPipeline(expression, symbol_table)
+        # Guardar reporte con nombre del archivo
+        base_name = os.path.splitext(os.path.basename(file_path))[0]
+        report_name = f"reports/reporte_{base_name}.md"
+        pipeline.save_report(report_name)
+        
+        print(f"  Compilación exitosa: {file_path}")
+        print(f"  Reporte guardado en: {report_name}")
+        
+    except Exception as e:
+        print(f"  ERROR durante la compilación: {e}")
+
+if __name__ == "__main__":
+    if len(sys.argv) > 1:
+        # Modo archivo: python main.py archivo.pas
+        file_path = sys.argv[1]
+        compile_pascal_file(file_path)
+    else:
+        # Modo de prueba con código Pascal completo
+        pascal_code = """
+        program Prueba;
+        var
+          x, y : integer;
+          flag : boolean;
+        
+        begin
+          x := 10;
+          y := 5;
+          flag := (x > 5) and (y < 10);
+        end.
+        """
+        
+        print("Modo de prueba: Compilando código Pascal de ejemplo")
+        symbol_table = VariableSymbolTable()
         
         try:
+            pipeline = CompilationPipeline(pascal_code, symbol_table)
             pipeline.run()
-            pipeline.save_report(f"reports/reporte_{expression.split()[0]}.md")
-            print(f" Compilación exitosa para: {expression}")
-        except ValueError as e:
-            print(f" ERROR: {e}")
+            pipeline.save_report("reports/reporte_prueba.md")
+            print("  Compilación de prueba exitosa!")
+        except Exception as e:
+            print(f" Error en compilación de prueba: {e}")

@@ -18,6 +18,8 @@ class SemanticAnalyzer:
         report = self._generate_markdown()
         return self.ast_root, report
 
+    # compiler/semantic_analyzer.py
+
     def _annotate_tree(self, node: Node):
         """
         Recorre el árbol (post-orden) para asignar y verificar tipos.
@@ -27,30 +29,30 @@ class SemanticAnalyzer:
 
         # Si es una hoja (operando)
         if not node.left and not node.right:
-            # Detección de tipos (código existente)
+            # Detección de tipos y modos de direccionamiento
             if node.value.isdigit():
                 node.type = 'integer'
-                node.addressing_mode = 'immediate'
+                node.addressing_mode = 'immediate'  # Valor inmediato
             elif (node.value.replace('.', '').replace('-', '').isdigit() and 
-                  node.value.count('.') == 1 and
-                  (node.value[0] == '-' or node.value[0].isdigit())):
+                node.value.count('.') == 1 and
+                (node.value[0] == '-' or node.value[0].isdigit())):
                 node.type = 'real'
-                node.addressing_mode = 'immediate'
+                node.addressing_mode = 'immediate'  # Valor inmediato
             elif node.value in ['true', 'false']:
                 node.type = 'boolean'
-                node.addressing_mode = 'immediate'
+                node.addressing_mode = 'immediate'  # Valor inmediato
             elif node.value.startswith("'") and node.value.endswith("'"):
                 node.type = 'char'
-                node.addressing_mode = 'immediate'
+                node.addressing_mode = 'immediate'  # Valor inmediato
             elif node.value.startswith('"') and node.value.endswith('"'):
                 node.type = 'string'
-                node.addressing_mode = 'immediate'
+                node.addressing_mode = 'immediate'  # Valor inmediato
             else:
                 # Buscar en tabla de símbolos variables
                 symbol = self.symbol_table.find_symbol_by_name(node.value)
                 if symbol:
                     node.type = symbol.type
-                    node.addressing_mode = symbol.mode
+                    node.addressing_mode = 'direct'  # ← Variables: acceso directo a memoria
                     node.memory_address = symbol.address
                 else:
                     node.type = f'ERROR: Variable \'{node.value}\' no declarada'
@@ -60,7 +62,7 @@ class SemanticAnalyzer:
 
         # Recorrer recursivamente los hijos primero
         self._annotate_tree(node.left)
-        if node.right:  # Solo si existe hijo derecho (operadores binarios)
+        if node.right:
             self._annotate_tree(node.right)
 
         # --- Verificación de tipos usando el sistema de tipos ---
@@ -80,7 +82,7 @@ class SemanticAnalyzer:
                 node.type = f'ERROR: Operador "not" no puede aplicarse a {operand_type}'
                 self.errors.append(node.type)
             
-            node.addressing_mode = 'register'
+            node.addressing_mode = 'register'  # Resultado en registro
             return
 
         # Para operadores binarios
@@ -96,16 +98,20 @@ class SemanticAnalyzer:
             node.type = f'ERROR: Operación \'{op}\' no permitida entre {left_type} y {right_type}'
             self.errors.append(node.type)
 
-        # --- Determinación de modo de direccionamiento ---
+        # --- Determinación de modo de direccionamiento MEJORADA ---
         if node.value in ['+', '-', '*', '/', '=', '<>', '<', '>', '<=', '>=', 'and', 'or']:
+            # Operaciones aritméticas, comparación y lógicas: resultado en registro
             node.addressing_mode = 'register'
         elif node.value == ':=':
+            # Asignación: modo directo (escritura a memoria)
+            node.addressing_mode = 'direct'
+            
             # Verificar compatibilidad de asignación
             if not TypeSystem.can_convert(right_type, left_type) and not 'ERROR' in left_type and not 'ERROR' in right_type:
                 node.type = f'ERROR: No se puede asignar {right_type} a {left_type}'
                 self.errors.append(node.type)
-            node.addressing_mode = 'direct'
-        elif not hasattr(node, 'addressing_mode'):
+        else:
+            # Por defecto: modo directo
             node.addressing_mode = 'direct'
 
     # ... (el resto del código se mantiene igual)

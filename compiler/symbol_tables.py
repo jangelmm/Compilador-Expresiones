@@ -3,7 +3,7 @@
 # Tablas Fijas
 RESERVED_WORDS = {
     'var': 1, 'proc': 2, 'begin': 3, 'end': 4, 
-    'integer': 5, 'char': 6, 'real': 7
+    'integer': 5, 'char': 6, 'real': 7, 'program': 8, 'boolean': 9, 'string': 10
 }
 
 OPERATORS = {
@@ -14,7 +14,7 @@ OPERATORS = {
 }
 
 DELIMITERS = {
-    ':': 201, ';': 202, '(': 203, ')': 204
+    ':': 201, ';': 202, '(': 203, ')': 204, ',': 205, '.': 206
 }
 
 
@@ -34,7 +34,7 @@ class VariableSymbolTable:
             'value': value,
             'scope': scope,
             'address': f"{self.address_counter:04X}",
-            'mode': 'direct'  # Modo de direccionamiento
+            
         }
         self.address_counter += 4  # Incremento para siguiente símbolo
         return symbol_id
@@ -45,19 +45,19 @@ class VariableSymbolTable:
 
     def generate_markdown_report(self):
         md = "## Tabla de Símbolos Variables\n\n"
-        md += "| ID | Nombre | Tipo | Scope | Dirección | Modo |\n"
-        md += "|----|--------|------|-------|-----------|------|\n"
+        md += "| ID | Nombre | Tipo | Scope | Dirección |\n"  # ← Quitar columna Modo
+        md += "|----|--------|------|-------|-----------|\n"
         
         for symbol_id, info in self.symbols.items():
             md += f"| {symbol_id} | {info['name']} | {info['type']} | "
-            md += f"{info['scope']} | {info['address']} | {info['mode']} |\n"
+            md += f"{info['scope']} | {info['address']} |\n"  # ← Quitar modo
         
-        # Agregar resumen
         md += f"\n**Total de símbolos:** {len(self.symbols)}\n"
         md += f"**Siguiente dirección disponible:** {self.address_counter:04X}\n"
         
         return md
     
+    # En symbol_tables.py - método find_symbol_by_name
     def find_symbol_by_name(self, name):
         """
         Busca un símbolo por nombre en la tabla.
@@ -65,13 +65,12 @@ class VariableSymbolTable:
         """
         for symbol_id, symbol_info in self.symbols.items():
             if symbol_info['name'] == name:
-                # Crear un objeto simple con los atributos necesarios
                 class Symbol:
                     pass
                 symbol = Symbol()
                 symbol.type = symbol_info['type']
-                symbol.mode = symbol_info['mode']
                 symbol.address = symbol_info['address']
+                # QUITAR: symbol.mode = symbol_info['mode']  ← Ya no tiene modo fijo
                 return symbol
         return None
 
