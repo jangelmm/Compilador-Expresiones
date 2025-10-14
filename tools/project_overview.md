@@ -14,9 +14,7 @@ ProcesoCompilacion
 ├── reports
 │   └── reporte_compilacion.md
 ├── README.md
-├── main.py
-├── project_overview.md
-└── script.py
+└── main.py
 ```
 
 ## `main.py`
@@ -28,145 +26,24 @@ from compiler.pipeline import CompilationPipeline
 
 if __name__ == "__main__":
     expression_a_evaluar = "x := 1 + a + (b * c) + 3"
+
+    # Define una tabla de símbolos de ejemplo para la prueba
+    tabla_de_simbolos_ejemplo = {
+        'x': 'int',
+        'a': 'int',
+        'b': 'int',
+        'c': 'int'
+    }
     
-    pipeline = CompilationPipeline(expression_a_evaluar)
+    # --- CAMBIO CLAVE AQUÍ ---
+    # Pasamos la tabla de símbolos al crear el pipeline
+    pipeline = CompilationPipeline(expression_a_evaluar, tabla_de_simbolos_ejemplo)
+    
     try:
         pipeline.run()
         pipeline.save_report()
     except ValueError as e:
         print(f"\n ERROR DURANTE LA COMPILACIÓN: {e}")```
-
-## `script.py`
-
-```python
-import os
-import argparse
-
-# Directorios a ignorar (incluye caches de Python)
-IGNORE_DIRS = {'.web', 'venv', '__pycache__'}
-
-# Extensiones de archivo permitidas
-ALLOWED_EXTS = {'.py'}
-
-# Archivos específicos a incluir siempre (aunque empiecen con '.'
-# o tengan extensión fuera de ALLOWED_EXTS)
-INCLUDED_FILES = {'requirements.txt', 'rxconfig.py', '.gitignore'}
-
-# Prefijos para el tree
-TREE_PREFIXES = {
-    'branch': '├── ',
-    'last':   '└── ',
-    'indent': '    ',
-    'pipe':   '│   '
-}
-
-
-def build_tree(root_path):
-    """
-    Genera una lista de líneas representando la estructura de directorios,
-    ignorando IGNORE_DIRS, pero incluyendo archivos en INCLUDED_FILES.
-    """
-    tree_lines = []
-
-    def _tree(dir_path, prefix=''):
-        entries = sorted(os.listdir(dir_path))
-        # Filtrar: ignora los directorios deseados; oculta dot-files salvo INCLUDED_FILES
-        entries = [
-            e for e in entries
-            if e not in IGNORE_DIRS
-               and (not e.startswith('.') or e in INCLUDED_FILES)
-        ]
-
-        dirs = [e for e in entries if os.path.isdir(os.path.join(dir_path, e))]
-        files = [e for e in entries if os.path.isfile(os.path.join(dir_path, e))]
-        total = len(dirs) + len(files)
-
-        for idx, name in enumerate(dirs + files):
-            path = os.path.join(dir_path, name)
-            connector = TREE_PREFIXES['last'] if idx == total - 1 else TREE_PREFIXES['branch']
-            tree_lines.append(f"{prefix}{connector}{name}")
-            if os.path.isdir(path):
-                extension = TREE_PREFIXES['indent'] if idx == total - 1 else TREE_PREFIXES['pipe']
-                _tree(path, prefix + extension)
-
-    tree_lines.append(os.path.basename(root_path) or root_path)
-    _tree(root_path)
-    return tree_lines
-
-
-def collect_files(root_path):
-    """
-    Recorre el árbol e incluye:
-    - Archivos con extensiones en ALLOWED_EXTS
-    - Archivos listados en INCLUDED_FILES (en cualquier carpeta)
-    """
-    paths = []
-    for dirpath, dirnames, filenames in os.walk(root_path):
-        # Excluir carpetas no deseadas
-        dirnames[:] = [d for d in dirnames if d not in IGNORE_DIRS]
-
-        for fname in sorted(filenames):
-            rel = os.path.relpath(os.path.join(dirpath, fname), root_path)
-            ext = os.path.splitext(fname)[1]
-            if ext in ALLOWED_EXTS or fname in INCLUDED_FILES:
-                paths.append(os.path.join(dirpath, fname))
-
-    return paths
-
-
-def ext_to_lang(ext):
-    """Mapea extensión de archivo a lenguaje para Markdown."""
-    return {
-        '.py': 'python',
-        '.java': 'java',
-        '.cpp': 'cpp',
-        '.c': 'c',
-        '.txt': 'text',
-        '': 'text'   # Para archivos como .gitignore
-    }.get(ext, 'text')
-
-
-def main():
-    parser = argparse.ArgumentParser(
-        description="Genera un Markdown con la estructura tipo tree y el código fuente.")
-    parser.add_argument(
-        'output', nargs='?', default='project_overview.md',
-        help='Nombre del archivo Markdown de salida. (default: project_overview.md)')
-    args = parser.parse_args()
-
-    root = os.getcwd()
-    tree_lines = build_tree(root)
-    code_files = collect_files(root)
-
-    with open(args.output, 'w', encoding='utf-8') as md:
-        # Título
-        md.write("# Estructura del proyecto\n\n")
-
-        # Árbol de directorios
-        md.write("```\n")
-        md.write("\n".join(tree_lines))
-        md.write("\n```\n\n")
-
-        # Contenido de cada archivo
-        for path in code_files:
-            rel_path = os.path.relpath(path, root)
-            ext = os.path.splitext(path)[1]
-            lang = ext_to_lang(ext)
-            md.write(f"## `{rel_path}`\n\n")
-            md.write(f"```{lang}\n")
-            try:
-                with open(path, 'r', encoding='utf-8') as f:
-                    md.write(f.read())
-            except Exception as e:
-                md.write(f"# Error al leer el archivo: {e}\n")
-            md.write("```\n\n")
-
-    print(f"Archivo Markdown generado: {args.output}")
-
-
-if __name__ == '__main__':
-    main()
-```
 
 ## `compiler\__init__.py`
 
@@ -326,50 +203,53 @@ class LexicalAnalyzer:
 from .lexical_analyzer import LexicalAnalyzer
 from .syntax_analizer import SyntaxAnalyzer
 from .syntactic_checking import SyntacticChecking
-from .semantic_analyzer import SemanticAnalyzer
+from .semantic_analyzer import SemanticAnalyzer  # Asegúrate de que este archivo y clase existan
 from .intermediate_code_gen import IntermediateCodeGenerator
 
 class CompilationPipeline:
     """Clase principal que gestiona todo el proceso de compilación."""
-    def __init__(self, expression):
+
+    # --- CAMBIO CLAVE AQUÍ ---
+    def __init__(self, expression, symbol_table): # 1. Aceptar symbol_table como argumento
         self.expression = expression
+        self.symbol_table = symbol_table       # 2. Guardarla en el objeto self
         self.report = f"# Reporte de Compilación para la Expresión\n\n`{expression}`\n\n---\n"
 
     def run(self):
-        self.report += "\n# Fase 1: Análisis\n";
+        self.report += "\n# Fase 1: Análisis\n"
 
-        """Ejecuta todas las fases del análisis y la síntesis."""
         print("Iniciando Fase 1.1: Análisis Lexicográfico...")
         lex_analyzer = LexicalAnalyzer(self.expression)
         tokens, lex_report = lex_analyzer.analyze()
         self.report += lex_report + "\n---\n"
 
-        self.report += "\n## Fase 1.2: Análisis Sintáctico\n";
+        self.report += "\n## Fase 1.2: Análisis Sintáctico\n"
 
         print("Iniciando Fase 1.2.1: Generación de Árbol de Expresión...")
         syntax_analyzer = SyntaxAnalyzer(list(tokens))
-        ast_root, syntax_report = syntax_analyzer.analyze()
+        ast_root, syntax_report = syntax_analyzer.analyze() # Capturamos el AST
         self.report += syntax_report + "\n---\n"
 
-        print("Iniciando Fase 1.2.2: Generación de Árbol de Tipos...")
+        print("Iniciando Fase 1.2.2: Comprobación Sintáctica (Árbol de Derivación)...")
         sc_analizer = SyntacticChecking(list(tokens))
         _, sc_report = sc_analizer.analyze()
         self.report += sc_report + "\n---\n"
 
-        print("Iniciando Fase 1.3: Analisis Semantico...")
+        print("Iniciando Fase 1.3: Análisis Semántico...")
+        # Ahora self.symbol_table existe y la llamada es correcta
         semantic_analyzer = SemanticAnalyzer(ast_root, self.symbol_table)
         annotated_ast, semantic_report = semantic_analyzer.analyze()
         self.report += semantic_report + "\n---\n"
 
-        self.report += "\n# Fase 2: Síntesis\n";
+        self.report += "\n# Fase 2: Síntesis\n"
 
         print("Iniciando Fase 2.1: Generación de Código Intermedio...")
-        icg = IntermediateCodeGenerator(ast_root)
+        # El generador de código intermedio debería usar el AST anotado
+        icg = IntermediateCodeGenerator(annotated_ast)
         icg_report = icg.generate()
         self.report += icg_report
 
     def save_report(self, filename="reports/reporte_compilacion.md"):
-        """Guarda el reporte completo en un archivo .md."""
         import os
         os.makedirs(os.path.dirname(filename), exist_ok=True)
         with open(filename, 'w', encoding='utf-8') as f:
@@ -381,7 +261,7 @@ class CompilationPipeline:
 ```python
 # compiler/semantic_analyzer.py
 
-from .syntax_analyzer import Node # Importamos la clase Node del AST
+from .syntax_analizer import Node # Importamos la clase Node del AST
 
 class SemanticAnalyzer:
     """

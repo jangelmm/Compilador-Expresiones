@@ -2,7 +2,7 @@ import os
 import argparse
 
 # Directorios a ignorar (incluye caches de Python)
-IGNORE_DIRS = {'.web', 'venv', '__pycache__'}
+IGNORE_DIRS = {'.web', 'venv', '__pycache__', 'tools'}
 
 # Extensiones de archivo permitidas
 ALLOWED_EXTS = {'.py'}
@@ -89,7 +89,7 @@ def main():
     parser = argparse.ArgumentParser(
         description="Genera un Markdown con la estructura tipo tree y el código fuente.")
     parser.add_argument(
-        'output', nargs='?', default='project_overview.md',
+        'output', nargs='?', default='tools/project_overview.md',
         help='Nombre del archivo Markdown de salida. (default: project_overview.md)')
     args = parser.parse_args()
 
