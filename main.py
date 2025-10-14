@@ -1,24 +1,49 @@
 # main.py
 
 from compiler.pipeline import CompilationPipeline
+from compiler.symbol_tables import VariableSymbolTable
 
 if __name__ == "__main__":
-    expression_a_evaluar = "x := 1 + a + (b * c) + 3"
-
-    # Define una tabla de símbolos de ejemplo para la prueba
-    tabla_de_simbolos_ejemplo = {
-        'x': 'int',
-        'a': 'int',
-        'b': 'int',
-        'c': 'int'
-    }
+    # Ejemplo con diferentes tipos
+    expressions = [
+        # "x := 1 + a + (b * c) + 3",  # Enteros
+        # "result := 3.14 * radius + 2.5",  # Reales
+        # "message := 'Hola ' + 'Mundo'",  # Strings
+        # "flag := (x > 5) and (y < 10)",  # Booleanos
+        # "mixed := 10 + 3.14"  # Mixed types
+    ]
     
-    # --- CAMBIO CLAVE AQUÍ ---
-    # Pasamos la tabla de símbolos al crear el pipeline
-    pipeline = CompilationPipeline(expression_a_evaluar, tabla_de_simbolos_ejemplo)
-    
-    try:
-        pipeline.run()
-        pipeline.save_report()
-    except ValueError as e:
-        print(f"\n ERROR DURANTE LA COMPILACIÓN: {e}")
+    for expression in expressions:
+        print(f"\n{'='*50}")
+        print(f"Compilando: {expression}")
+        print(f"{'='*50}")
+        
+        symbol_table = VariableSymbolTable()
+        
+        # Definir símbolos según la expresión
+        if "message :=" in expression:
+            symbol_table.add_symbol('message', 'string')
+        elif "result :=" in expression:
+            symbol_table.add_symbol('result', 'real')
+            symbol_table.add_symbol('radius', 'real')
+        elif "flag :=" in expression:
+            symbol_table.add_symbol('flag', 'boolean')
+            symbol_table.add_symbol('x', 'integer')
+            symbol_table.add_symbol('y', 'integer')
+        elif "mixed :=" in expression:
+            symbol_table.add_symbol('mixed', 'real')
+        else:
+            # Default: enteros
+            symbol_table.add_symbol('x', 'integer')
+            symbol_table.add_symbol('a', 'integer')
+            symbol_table.add_symbol('b', 'integer') 
+            symbol_table.add_symbol('c', 'integer')
+        
+        pipeline = CompilationPipeline(expression, symbol_table)
+        
+        try:
+            pipeline.run()
+            pipeline.save_report(f"reports/reporte_{expression.split()[0]}.md")
+            print(f" Compilación exitosa para: {expression}")
+        except ValueError as e:
+            print(f" ERROR: {e}")

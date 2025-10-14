@@ -9,10 +9,16 @@ ProcesoCompilacion
 │   ├── pipeline.py
 │   ├── semantic_analyzer.py
 │   ├── structures.py
+│   ├── symbol_tables.py
 │   ├── syntactic_checking.py
 │   └── syntax_analizer.py
 ├── reports
-│   └── reporte_compilacion.md
+│   ├── reporte_compilacion.md
+│   ├── reporte_flag.md
+│   ├── reporte_message.md
+│   ├── reporte_mixed.md
+│   ├── reporte_result.md
+│   └── reporte_x.md
 ├── README.md
 └── main.py
 ```
@@ -23,27 +29,52 @@ ProcesoCompilacion
 # main.py
 
 from compiler.pipeline import CompilationPipeline
+from compiler.symbol_tables import VariableSymbolTable
 
 if __name__ == "__main__":
-    expression_a_evaluar = "x := 1 + a + (b * c) + 3"
-
-    # Define una tabla de símbolos de ejemplo para la prueba
-    tabla_de_simbolos_ejemplo = {
-        'x': 'int',
-        'a': 'int',
-        'b': 'int',
-        'c': 'int'
-    }
+    # Ejemplo con diferentes tipos
+    expressions = [
+        # "x := 1 + a + (b * c) + 3",  # Enteros
+        # "result := 3.14 * radius + 2.5",  # Reales
+        # "message := 'Hola ' + 'Mundo'",  # Strings
+        # "flag := (x > 5) and (y < 10)",  # Booleanos
+        # "mixed := 10 + 3.14"  # Mixed types
+    ]
     
-    # --- CAMBIO CLAVE AQUÍ ---
-    # Pasamos la tabla de símbolos al crear el pipeline
-    pipeline = CompilationPipeline(expression_a_evaluar, tabla_de_simbolos_ejemplo)
-    
-    try:
-        pipeline.run()
-        pipeline.save_report()
-    except ValueError as e:
-        print(f"\n ERROR DURANTE LA COMPILACIÓN: {e}")```
+    for expression in expressions:
+        print(f"\n{'='*50}")
+        print(f"Compilando: {expression}")
+        print(f"{'='*50}")
+        
+        symbol_table = VariableSymbolTable()
+        
+        # Definir símbolos según la expresión
+        if "message :=" in expression:
+            symbol_table.add_symbol('message', 'string')
+        elif "result :=" in expression:
+            symbol_table.add_symbol('result', 'real')
+            symbol_table.add_symbol('radius', 'real')
+        elif "flag :=" in expression:
+            symbol_table.add_symbol('flag', 'boolean')
+            symbol_table.add_symbol('x', 'integer')
+            symbol_table.add_symbol('y', 'integer')
+        elif "mixed :=" in expression:
+            symbol_table.add_symbol('mixed', 'real')
+        else:
+            # Default: enteros
+            symbol_table.add_symbol('x', 'integer')
+            symbol_table.add_symbol('a', 'integer')
+            symbol_table.add_symbol('b', 'integer') 
+            symbol_table.add_symbol('c', 'integer')
+        
+        pipeline = CompilationPipeline(expression, symbol_table)
+        
+        try:
+            pipeline.run()
+            pipeline.save_report(f"reports/reporte_{expression.split()[0]}.md")
+            print(f" Compilación exitosa para: {expression}")
+        except ValueError as e:
+            print(f" ERROR: {e}")```
 
 ## `compiler\__init__.py`
 
@@ -126,41 +157,39 @@ class IntermediateCodeGenerator:
 # compiler/lexical_analyzer.py
 
 import re
+from .symbol_tables import RESERVED_WORDS, OPERATORS, DELIMITERS, VariableSymbolTable
 
 class LexicalAnalyzer:
     """
-    Convierte una cadena de código fuente en tokens y genera un reporte.
-    Esta versión es más robusta y maneja un conjunto más amplio de tokens.
+    Convierte una cadena de código fuente en tokens usando tablas fijas y variables.
     """
-    # Especificación de tokens usando expresiones regulares
     TOKEN_SPECIFICATIONS = [
-        # Palabras clave y Tipos de Datos se deben buscar antes que los IDs genéricos
         ('KEYWORD_VAR',         r'\bvar\b'),
         ('KEYWORD_PROC',        r'\bproc\b'),
         ('KEYWORD_BEGIN',       r'\bbegin\b'),
         ('KEYWORD_END',         r'\bend\b'),
         ('TIPO_DATO',           r'\b(integer|char|real)\b'),
-        # Identificadores (variables, nombres de procedimientos)
+        ('STRING',              r"'[^']*'"),  # Strings entre comillas simples
         ('ID',                  r'[a-zA-Z_]\w*'),
-        # Literales y Operadores
+        ('NUMERO_REAL',         r'\d+\.\d*|\.\d+'),  # Números reales (1.23, .5, 3.)
         ('NUMERO_ENTERO',       r'\d+'),
         ('OPERADOR_ASIGNACION', r':='),
         ('OPERADOR_ARITMETICO', r'[+\-*/]'),
-        # Delimitadores y otros símbolos
+        ('OPERADOR_COMPARACION', r'[<>]=?|='),  # <, >, <=, >=, =
+        ('OPERADOR_DESIGUALDAD', r'<>'),        # <>
+        ('OPERADOR_LOGICO',     r'\b(and|or|not)\b'),  # ACTUALIZADO: agregar 'not'
         ('DELIMITADOR',         r'[:;]'),
         ('PAREN',               r'[()]'),
-        # Ignorar espacios en blanco y saltos de línea
         ('SKIP',                r'[ \t\r\n]+'),
-        # Cualquier otro caracter es un error
         ('MISMATCH',            r'.'),
     ]
 
-    # Compilamos la expresión regular maestra que une todas las especificaciones
     TOKEN_REGEX = '|'.join('(?P<%s>%s)' % pair for pair in TOKEN_SPECIFICATIONS)
 
-    def __init__(self, code_string):
+    def __init__(self, code_string, symbol_table=None):
         self.code = code_string
         self.tokens = []
+        self.symbol_table = symbol_table if symbol_table is not None else VariableSymbolTable()
 
     def analyze(self):
         """Realiza el análisis y devuelve los tokens y el reporte."""
@@ -177,22 +206,67 @@ class LexicalAnalyzer:
             if kind == 'SKIP':
                 continue
             elif kind == 'MISMATCH':
-                # Podríamos querer saber la línea y columna en un lexer más avanzado
                 raise ValueError(f"Caracter no reconocido: '{value}'")
             
-            # El valor de las palabras clave y tipos es el propio token
+            # Procesar según el tipo de token
             if kind in ['KEYWORD_VAR', 'KEYWORD_PROC', 'KEYWORD_BEGIN', 'KEYWORD_END', 'TIPO_DATO']:
                 value = value.lower()
+                token_id = RESERVED_WORDS.get(value)
+                self.tokens.append(('RESERVED_WORD', value, token_id))
+            
+            elif kind in ['OPERADOR_ASIGNACION', 'OPERADOR_ARITMETICO', 'OPERADOR_COMPARACION', 'OPERADOR_DESIGUALDAD']:
+                token_id = OPERATORS.get(value)
+                self.tokens.append(('OPERATOR', value, token_id))
 
-            self.tokens.append((kind, value))
+            elif kind == 'OPERADOR_LOGICO':  # Manejar operadores lógicos
+                token_id = OPERATORS.get(value)
+                self.tokens.append(('OPERATOR', value, token_id))
+
+            elif kind == 'DELIMITADOR':
+                token_id = DELIMITERS.get(value)
+                self.tokens.append(('DELIMITER', value, token_id))
+
+            elif kind == 'PAREN':
+                self.tokens.append(('PAREN', value, None))
+
+            elif kind == 'NUMERO_ENTERO':
+                self.tokens.append(('CONSTANT', value, None))
+
+            elif kind == 'NUMERO_REAL':
+                self.tokens.append(('CONSTANT', value, None))
+
+            elif kind == 'STRING':
+                self.tokens.append(('STRING', value, None))
+
+            elif kind == 'ID':
+                # Verificar si el símbolo ya existe en la tabla
+                symbol_exists = False
+                for symbol_id, symbol_info in self.symbol_table.symbols.items():
+                    if symbol_info['name'] == value:
+                        symbol_exists = True
+                        break
+                
+                if not symbol_exists:
+                    # Solo agregar si no existe, usando tipo por defecto
+                    symbol_type = 'integer'
+                    self.symbol_table.add_symbol(value, symbol_type)
+                
+                # Buscar el ID del símbolo (ya sea existente o nuevo)
+                symbol_id = None
+                for sid, info in self.symbol_table.symbols.items():
+                    if info['name'] == value:
+                        symbol_id = sid
+                        break
+                
+                self.tokens.append(('IDENTIFIER', value, symbol_id))
 
     def _generate_markdown(self):
         md = "## 1.1. Análisis Lexicográfico\n\n"
         md += "El código fuente se descompone en los siguientes tokens:\n\n"
-        md += "| Tipo                    | Valor         |\n"
-        md += "|-------------------------|---------------|\n"
-        for kind, value in self.tokens:
-            md += f"| {kind:<23} | `{value}`      |\n"
+        md += "| Tipo | Valor | ID |\n"
+        md += "|------|-------|----|\n"
+        for kind, value, token_id in self.tokens:
+            md += f"| {kind} | `{value}` | {token_id} |\n"
         return md```
 
 ## `compiler\pipeline.py`
@@ -203,48 +277,50 @@ class LexicalAnalyzer:
 from .lexical_analyzer import LexicalAnalyzer
 from .syntax_analizer import SyntaxAnalyzer
 from .syntactic_checking import SyntacticChecking
-from .semantic_analyzer import SemanticAnalyzer  # Asegúrate de que este archivo y clase existan
+from .semantic_analyzer import SemanticAnalyzer
 from .intermediate_code_gen import IntermediateCodeGenerator
+from .symbol_tables import generate_fixed_tables_report
 
 class CompilationPipeline:
-    """Clase principal que gestiona todo el proceso de compilación."""
-
-    # --- CAMBIO CLAVE AQUÍ ---
-    def __init__(self, expression, symbol_table): # 1. Aceptar symbol_table como argumento
+    def __init__(self, expression, symbol_table=None):
         self.expression = expression
-        self.symbol_table = symbol_table       # 2. Guardarla en el objeto self
+        self.symbol_table = symbol_table
         self.report = f"# Reporte de Compilación para la Expresión\n\n`{expression}`\n\n---\n"
 
     def run(self):
         self.report += "\n# Fase 1: Análisis\n"
 
         print("Iniciando Fase 1.1: Análisis Lexicográfico...")
-        lex_analyzer = LexicalAnalyzer(self.expression)
+        # MODIFICACIÓN: Pasar la tabla de símbolos al LexicalAnalyzer si existe
+        lex_analyzer = LexicalAnalyzer(self.expression, self.symbol_table)
         tokens, lex_report = lex_analyzer.analyze()
         self.report += lex_report + "\n---\n"
+
+        # AGREGAR reportes de tablas
+        self.report += generate_fixed_tables_report() + "\n"
+        self.report += lex_analyzer.symbol_table.generate_markdown_report() + "\n---\n"
 
         self.report += "\n## Fase 1.2: Análisis Sintáctico\n"
 
         print("Iniciando Fase 1.2.1: Generación de Árbol de Expresión...")
-        syntax_analyzer = SyntaxAnalyzer(list(tokens))
-        ast_root, syntax_report = syntax_analyzer.analyze() # Capturamos el AST
+        syntax_tokens = [(kind, value) for kind, value, _ in tokens]
+        syntax_analyzer = SyntaxAnalyzer(syntax_tokens)
+        ast_root, syntax_report = syntax_analyzer.analyze()
         self.report += syntax_report + "\n---\n"
 
         print("Iniciando Fase 1.2.2: Comprobación Sintáctica (Árbol de Derivación)...")
-        sc_analizer = SyntacticChecking(list(tokens))
-        _, sc_report = sc_analizer.analyze()
+        sc_analizer = SyntacticChecking(syntax_tokens)
+        parse_tree, sc_report = sc_analizer.analyze()
         self.report += sc_report + "\n---\n"
 
         print("Iniciando Fase 1.3: Análisis Semántico...")
-        # Ahora self.symbol_table existe y la llamada es correcta
-        semantic_analyzer = SemanticAnalyzer(ast_root, self.symbol_table)
+        semantic_analyzer = SemanticAnalyzer(ast_root, lex_analyzer.symbol_table)
         annotated_ast, semantic_report = semantic_analyzer.analyze()
         self.report += semantic_report + "\n---\n"
 
         self.report += "\n# Fase 2: Síntesis\n"
 
         print("Iniciando Fase 2.1: Generación de Código Intermedio...")
-        # El generador de código intermedio debería usar el AST anotado
         icg = IntermediateCodeGenerator(annotated_ast)
         icg_report = icg.generate()
         self.report += icg_report
@@ -261,24 +337,20 @@ class CompilationPipeline:
 ```python
 # compiler/semantic_analyzer.py
 
-from .syntax_analizer import Node # Importamos la clase Node del AST
+from .syntax_analizer import Node
+from .symbol_tables import VariableSymbolTable, TypeSystem
 
 class SemanticAnalyzer:
-    """
-    Realiza el análisis semántico recorriendo el AST para verificar tipos.
-    """
-    def __init__(self, ast_root: Node, symbol_table: dict):
-        """
-        Inicializa el analizador con el AST y una tabla de símbolos.
-        """
+    def __init__(self, ast_root: Node, symbol_table: VariableSymbolTable):
         self.ast_root = ast_root
         self.symbol_table = symbol_table
+        self.errors = []
 
     def analyze(self):
         """
         Ejecuta el análisis de tipos y devuelve el AST anotado y un reporte.
         """
-        # La función de anotación modifica el AST directamente
+        self.errors = []
         self._annotate_tree(self.ast_root)
         report = self._generate_markdown()
         return self.ast_root, report
@@ -286,76 +358,129 @@ class SemanticAnalyzer:
     def _annotate_tree(self, node: Node):
         """
         Recorre el árbol (post-orden) para asignar y verificar tipos.
-        Esta función MODIFICA el árbol, añadiendo el atributo .type a cada nodo.
         """
         if not node:
             return
 
         # Si es una hoja (operando)
         if not node.left and not node.right:
+            # Detección de tipos (código existente)
             if node.value.isdigit():
-                node.type = 'int'
-            elif node.value in self.symbol_table:
-                node.type = self.symbol_table[node.value]
+                node.type = 'integer'
+                node.addressing_mode = 'immediate'
+            elif (node.value.replace('.', '').replace('-', '').isdigit() and 
+                  node.value.count('.') == 1 and
+                  (node.value[0] == '-' or node.value[0].isdigit())):
+                node.type = 'real'
+                node.addressing_mode = 'immediate'
+            elif node.value in ['true', 'false']:
+                node.type = 'boolean'
+                node.addressing_mode = 'immediate'
+            elif node.value.startswith("'") and node.value.endswith("'"):
+                node.type = 'char'
+                node.addressing_mode = 'immediate'
+            elif node.value.startswith('"') and node.value.endswith('"'):
+                node.type = 'string'
+                node.addressing_mode = 'immediate'
             else:
-                node.type = f'ERROR: Var \'{node.value}\' no declarada'
+                # Buscar en tabla de símbolos variables
+                symbol = self.symbol_table.find_symbol_by_name(node.value)
+                if symbol:
+                    node.type = symbol.type
+                    node.addressing_mode = symbol.mode
+                    node.memory_address = symbol.address
+                else:
+                    node.type = f'ERROR: Variable \'{node.value}\' no declarada'
+                    node.addressing_mode = 'error'
+                    self.errors.append(node.type)
             return
 
         # Recorrer recursivamente los hijos primero
         self._annotate_tree(node.left)
-        self._annotate_tree(node.right)
+        if node.right:  # Solo si existe hijo derecho (operadores binarios)
+            self._annotate_tree(node.right)
 
-        # --- Reglas de compatibilidad de tipos ---
-        left_type = node.left.type
-        right_type = node.right.type
+        # --- Verificación de tipos usando el sistema de tipos ---
         op = node.value
-
-        if op in ['*', '/']:
-            if 'ERROR' in left_type or 'ERROR' in right_type:
-                node.type = 'ERROR: Operando inválido'
-            elif left_type == 'int' and right_type == 'int':
-                node.type = 'int'
-            # Podríamos añadir más reglas (ej. int * real -> real)
-            else:
-                node.type = f'ERROR: Tipos incompatibles para \'{op}\' ({left_type}, {right_type})'
         
-        elif op in ['+', '-']:
-            if 'ERROR' in left_type or 'ERROR' in right_type:
-                node.type = 'ERROR: Operando inválido'
-            elif left_type == 'int' and right_type == 'int':
-                node.type = 'int'
-            elif left_type == 'real' and right_type == 'int':
-                node.type = 'real' # Promoción de tipo
-            elif left_type == 'int' and right_type == 'real':
-                node.type = 'real' # Promoción de tipo
+        # Manejar operador unario 'not'
+        if op == 'not':
+            if not node.left:
+                node.type = 'ERROR: Operador unario "not" requiere un operando'
+                self.errors.append(node.type)
+                return
+                
+            operand_type = node.left.type
+            if operand_type == 'boolean':
+                node.type = 'boolean'
             else:
-                node.type = f'ERROR: Tipos incompatibles para \'{op}\' ({left_type}, {right_type})'
-        
-        elif op == ':=':
-            if 'ERROR' in left_type or 'ERROR' in right_type:
-                node.type = 'ERROR: Operando inválido'
-            # Regla de asignación: el tipo de la derecha debe ser compatible con el de la izquierda
-            elif left_type == right_type or (left_type == 'real' and right_type == 'int'):
-                node.type = left_type # La asignación no tiene tipo propio, pero la validamos
-            else:
-                node.type = f'ERROR: No se puede asignar tipo {right_type} a {left_type}'
+                node.type = f'ERROR: Operador "not" no puede aplicarse a {operand_type}'
+                self.errors.append(node.type)
+            
+            node.addressing_mode = 'register'
+            return
 
+        # Para operadores binarios
+        left_type = node.left.type if node.left else None
+        right_type = node.right.type if node.right else None
+
+        # Usar el sistema de tipos para determinar el tipo resultante
+        result_type = TypeSystem.get_result_type(op, left_type, right_type)
+        
+        if result_type:
+            node.type = result_type
+        else:
+            node.type = f'ERROR: Operación \'{op}\' no permitida entre {left_type} y {right_type}'
+            self.errors.append(node.type)
+
+        # --- Determinación de modo de direccionamiento ---
+        if node.value in ['+', '-', '*', '/', '=', '<>', '<', '>', '<=', '>=', 'and', 'or']:
+            node.addressing_mode = 'register'
+        elif node.value == ':=':
+            # Verificar compatibilidad de asignación
+            if not TypeSystem.can_convert(right_type, left_type) and not 'ERROR' in left_type and not 'ERROR' in right_type:
+                node.type = f'ERROR: No se puede asignar {right_type} a {left_type}'
+                self.errors.append(node.type)
+            node.addressing_mode = 'direct'
+        elif not hasattr(node, 'addressing_mode'):
+            node.addressing_mode = 'direct'
+
+    # ... (el resto del código se mantiene igual)
     def _generate_markdown(self):
         """Genera el reporte Markdown con el árbol semántico anotado."""
         md = "## 1.3. Análisis Semántico\n\n"
+        
+        if self.errors:
+            md += "### Errores Semánticos Encontrados\n\n"
+            for error in set(self.errors):  # Mostrar errores únicos
+                md += f"- {error}\n"
+            md += "\n"
+        
         md += "Se verifica la compatibilidad de tipos recorriendo el AST. Cada nodo se anota con su tipo inferido o con un error.\n\n"
         md += "```mermaid\n"
         md += "graph TD\n"
         md += "    classDef error fill:#ffdddd,stroke:#d44,stroke-width:2px;\n"
         md += "    classDef default fill:#ddffdd,stroke:#4d4,stroke-width:2px;\n"
+        md += "    classDef immediate fill:#ddddff,stroke:#44d,stroke-width:2px;\n"
         
-        # Función interna para recorrer el árbol y generar las líneas de Mermaid
         def traverse(node):
             lines = []
-            node_type = node.type if node.type else " indefinido"
-            label = f'["<b>{node.value}</b><br/><i>{node_type}</i>"]'
-            style = "error" if "ERROR" in node_type else "default"
-            lines.append(f"    {node.id}{label}:::{style}")
+            node_type = node.type if node.type else "indefinido"
+            
+            # Determinar clase CSS basada en tipo y modo
+            if "ERROR" in node_type:
+                style_class = "error"
+            elif getattr(node, 'addressing_mode', '') == 'immediate':
+                style_class = "immediate"
+            else:
+                style_class = "default"
+                
+            addressing_info = f"<br/>Modo: {getattr(node, 'addressing_mode', 'N/A')}"
+            if hasattr(node, 'memory_address'):
+                addressing_info += f"<br/>Addr: {node.memory_address}"
+                
+            label = f'["<b>{node.value}</b><br/><i>{node_type}</i>{addressing_info}"]'
+            lines.append(f"    {node.id}{label}:::{style_class}")
 
             if node.left:
                 lines.extend(traverse(node.left))
@@ -368,6 +493,23 @@ class SemanticAnalyzer:
         mermaid_lines = traverse(self.ast_root)
         md += "\n".join(mermaid_lines)
         md += "\n```\n"
+        
+        # Agregar resumen de tipos
+        md += "\n### Resumen de Tipos en la Expresión\n\n"
+        type_count = {}
+        def count_types(node):
+            if hasattr(node, 'type') and node.type:
+                if "ERROR" not in node.type:
+                    type_count[node.type] = type_count.get(node.type, 0) + 1
+            if node.left:
+                count_types(node.left)
+            if node.right:
+                count_types(node.right)
+        
+        count_types(self.ast_root)
+        for type_name, count in type_count.items():
+            md += f"- **{type_name}**: {count} ocurrencias\n"
+        
         return md```
 
 ## `compiler\structures.py`
@@ -391,10 +533,253 @@ class Node:
         if child:
             self.children.append(child)```
 
+## `compiler\symbol_tables.py`
+
+```python
+# compiler/symbol_tables.py
+
+# Tablas Fijas
+RESERVED_WORDS = {
+    'var': 1, 'proc': 2, 'begin': 3, 'end': 4, 
+    'integer': 5, 'char': 6, 'real': 7
+}
+
+OPERATORS = {
+    ':=': 101, '+': 102, '-': 103, '*': 104, '/': 105,
+    # Operadores de comparación y lógicos
+    '=': 106, '<': 107, '>': 108, '<=': 109, '>=': 110, '<>': 111,
+    'and': 112, 'or': 113, 'not': 114  # AGREGADO: 'not'
+}
+
+DELIMITERS = {
+    ':': 201, ';': 202, '(': 203, ')': 204
+}
+
+
+class VariableSymbolTable:
+    def __init__(self):
+        self.symbols = {}
+        self.address_counter = 0x1000  # Dirección base en RAM
+        self.scope_stack = [0]  # Scope global inicial
+        
+    def add_symbol(self, name, symbol_type, value=None, scope=None):
+        if scope is None:
+            scope = self.scope_stack[-1]
+        symbol_id = self._generate_hash(name, scope)
+        self.symbols[symbol_id] = {
+            'name': name,
+            'type': symbol_type,
+            'value': value,
+            'scope': scope,
+            'address': f"{self.address_counter:04X}",
+            'mode': 'direct'  # Modo de direccionamiento
+        }
+        self.address_counter += 4  # Incremento para siguiente símbolo
+        return symbol_id
+    
+    def _generate_hash(self, name, scope):
+        # Función hash simple para generar IDs únicos considerando el scope
+        return hash(f"{name}_{scope}") % 1000 + 10000
+
+    def generate_markdown_report(self):
+        md = "## Tabla de Símbolos Variables\n\n"
+        md += "| ID | Nombre | Tipo | Scope | Dirección | Modo |\n"
+        md += "|----|--------|------|-------|-----------|------|\n"
+        
+        for symbol_id, info in self.symbols.items():
+            md += f"| {symbol_id} | {info['name']} | {info['type']} | "
+            md += f"{info['scope']} | {info['address']} | {info['mode']} |\n"
+        
+        # Agregar resumen
+        md += f"\n**Total de símbolos:** {len(self.symbols)}\n"
+        md += f"**Siguiente dirección disponible:** {self.address_counter:04X}\n"
+        
+        return md
+    
+    def find_symbol_by_name(self, name):
+        """
+        Busca un símbolo por nombre en la tabla.
+        Retorna la información del símbolo o None si no existe.
+        """
+        for symbol_id, symbol_info in self.symbols.items():
+            if symbol_info['name'] == name:
+                # Crear un objeto simple con los atributos necesarios
+                class Symbol:
+                    pass
+                symbol = Symbol()
+                symbol.type = symbol_info['type']
+                symbol.mode = symbol_info['mode']
+                symbol.address = symbol_info['address']
+                return symbol
+        return None
+
+class TypeSystem:
+    """
+    Sistema de tipos para verificar compatibilidad y determinar tipos resultantes.
+    """
+    
+    # Tabla de compatibilidad de tipos para operaciones
+    TYPE_COMPATIBILITY = {
+        # Operaciones aritméticas
+        '+': {
+            ('integer', 'integer'): 'integer',
+            ('real', 'real'): 'real',
+            ('integer', 'real'): 'real',
+            ('real', 'integer'): 'real',
+            ('string', 'string'): 'string',
+        },
+        '-': {
+            ('integer', 'integer'): 'integer',
+            ('real', 'real'): 'real',
+            ('integer', 'real'): 'real',
+            ('real', 'integer'): 'real',
+        },
+        '*': {
+            ('integer', 'integer'): 'integer',
+            ('real', 'real'): 'real',
+            ('integer', 'real'): 'real',
+            ('real', 'integer'): 'real',
+        },
+        '/': {
+            ('integer', 'integer'): 'real',
+            ('real', 'real'): 'real',
+            ('integer', 'real'): 'real',
+            ('real', 'integer'): 'real',
+        },
+        # Operaciones de comparación
+        '=': {
+            ('integer', 'integer'): 'boolean',
+            ('real', 'real'): 'boolean',
+            ('integer', 'real'): 'boolean',
+            ('real', 'integer'): 'boolean',
+            ('boolean', 'boolean'): 'boolean',
+            ('string', 'string'): 'boolean',
+            ('char', 'char'): 'boolean',
+        },
+        '<>': {
+            ('integer', 'integer'): 'boolean',
+            ('real', 'real'): 'boolean',
+            ('integer', 'real'): 'boolean',
+            ('real', 'integer'): 'boolean',
+            ('boolean', 'boolean'): 'boolean',
+            ('string', 'string'): 'boolean',
+            ('char', 'char'): 'boolean',
+        },
+        '<': {
+            ('integer', 'integer'): 'boolean',
+            ('real', 'real'): 'boolean',
+            ('integer', 'real'): 'boolean',
+            ('real', 'integer'): 'boolean',
+        },
+        '>': {
+            ('integer', 'integer'): 'boolean',
+            ('real', 'real'): 'boolean',
+            ('integer', 'real'): 'boolean',
+            ('real', 'integer'): 'boolean',
+        },
+        '<=': {
+            ('integer', 'integer'): 'boolean',
+            ('real', 'real'): 'boolean',
+            ('integer', 'real'): 'boolean',
+            ('real', 'integer'): 'boolean',
+        },
+        '>=': {
+            ('integer', 'integer'): 'boolean',
+            ('real', 'real'): 'boolean',
+            ('integer', 'real'): 'boolean',
+            ('real', 'integer'): 'boolean',
+        },
+        # Operaciones lógicas
+        'and': {
+            ('boolean', 'boolean'): 'boolean',
+        },
+        'or': {
+            ('boolean', 'boolean'): 'boolean',
+        },
+        'not': {
+            ('boolean',): 'boolean',  # 'not' aplicado a boolean devuelve boolean
+        }
+    }
+    
+    # Tabla de conversiones permitidas
+    CONVERSIONS = {
+        'integer': ['real'],  # integer se puede convertir a real
+        'real': [],           # real no se puede convertir a integer automáticamente
+        'boolean': [],
+        'string': [],
+        'char': ['string']    # char se puede convertir a string
+    }
+
+    @staticmethod
+    def get_result_type(operator, left_type, right_type):
+        """
+        Determina el tipo resultante de una operación entre dos tipos.
+        Retorna None si la operación no es válida.
+        """
+        # Limpiar tipos que tengan "ERROR" en el nombre
+        if 'ERROR' in str(left_type) or (right_type and 'ERROR' in str(right_type)):
+            return None
+            
+        # Para asignación, el tipo resultante es el tipo del lado izquierdo
+        if operator == ':=':
+            return left_type
+            
+        # Para operador unario 'not'
+        if operator == 'not':
+            if left_type == 'boolean':
+                return 'boolean'
+            return None
+            
+        # Buscar en la tabla de compatibilidad
+        if operator in TypeSystem.TYPE_COMPATIBILITY:
+            compatibility_table = TypeSystem.TYPE_COMPATIBILITY[operator]
+            
+            # Buscar combinación exacta
+            if (left_type, right_type) in compatibility_table:
+                return compatibility_table[(left_type, right_type)]
+            
+            # Si no encuentra combinación exacta, retornar None (error)
+            return None
+        
+        return None
+
+    @staticmethod
+    def can_convert(from_type, to_type):
+        """
+        Verifica si un tipo puede convertirse automáticamente a otro.
+        """
+        if from_type == to_type:
+            return True
+            
+        if from_type in TypeSystem.CONVERSIONS:
+            return to_type in TypeSystem.CONVERSIONS[from_type]
+            
+        return False
+
+def generate_fixed_tables_report():
+    md = "## Tablas Fijas del Lenguaje\n\n"
+    
+    md += "### Palabras Reservadas\n"
+    md += "| ID | Palabra |\n|----|---------|\n"
+    for word, id_val in RESERVED_WORDS.items():
+        md += f"| {id_val} | {word} |\n"
+    
+    md += "\n### Operadores\n"
+    md += "| ID | Operador |\n|----|----------|\n"
+    for op, id_val in OPERATORS.items():
+        md += f"| {id_val} | {op} |\n"
+    
+    md += "\n### Delimitadores\n"
+    md += "| ID | Delimitador |\n|----|-------------|\n"
+    for delim, id_val in DELIMITERS.items():
+        md += f"| {id_val} | {delim} |\n"
+        
+    return md```
+
 ## `compiler\syntactic_checking.py`
 
 ```python
-# compiler/syntax_analyzer.py
+# compiler/syntactic_checking.py
 
 from .structures import Node
 
@@ -406,9 +791,16 @@ class SyntacticChecking:
 
     def analyze(self):
         """Realiza el análisis y devuelve el árbol y el reporte."""
-        parse_tree = self._parse()
-        report = self._generate_markdown(parse_tree)
-        return parse_tree, report
+        try:
+            parse_tree = self._parse()
+            report = self._generate_markdown(parse_tree)
+            return parse_tree, report
+        except Exception as e:
+            # Si hay error, generar un reporte de error
+            error_report = f"### 1.2.2. Comprobación Sintáctica / Comprobación de Tipos\n\n"
+            error_report += f"**Error de sintaxis:** {str(e)}\n\n"
+            error_report += "La secuencia de tokens no pudo ser validada completamente por la gramática.\n"
+            return None, error_report
 
     def _current_token(self):
         return self.tokens[self.pos] if self.pos < len(self.tokens) else ('EOF', None)
@@ -416,7 +808,6 @@ class SyntacticChecking:
     def _consume(self, expected_type=None):
         kind, val = self._current_token()
         if expected_type and kind != expected_type:
-            # El mensaje de error ahora es más informativo
             raise ValueError(f"Error de sintaxis: Se esperaba {expected_type} pero se encontró {kind} ('{val}')")
         self.pos += 1
         return kind, val
@@ -425,29 +816,29 @@ class SyntacticChecking:
         # La gramática sigue siendo S -> ID := E
         root = Node("S")
         
-        id_val = self._consume('ID')[1]
+        id_val = self._consume('IDENTIFIER')[1]
         id_node = Node("ID")
         id_node.add_child(Node(id_val))
         root.add_child(id_node)
 
-        # --- CAMBIO CLAVE ---
-        # Ahora esperamos 'OPERADOR_ASIGNACION' en lugar de 'ASSIGN'
-        assign_val = self._consume('OPERADOR_ASIGNACION')[1]
+        assign_kind, assign_val = self._consume()
+        if assign_kind != 'OPERATOR' or assign_val != ':=':
+            raise ValueError(f"Error de sintaxis: Se esperaba operador ':=' pero se encontró {assign_kind} ('{assign_val}')")
         root.add_child(Node(assign_val))
         
         root.add_child(self._e())
 
+        # Verificar que no queden tokens por consumir
         if self._current_token()[0] != 'EOF':
-            raise ValueError("Error de sintaxis: Tokens extra al final de la expresión.")
+            raise ValueError(f"Error de sintaxis: Tokens extra al final de la expresión: {self._current_token()}")
         return root
     
     def _e(self):
-        node_e = Node("E")
-        node_e.add_child(self._t())
-        # --- CAMBIO CLAVE ---
-        # Ahora comprobamos si el token es de tipo 'OPERADOR_ARITMETICO'
-        while self._current_token()[0] == 'OPERADOR_ARITMETICO' and self._current_token()[1] in ('+', '-'):
-            op_val = self._consume('OPERADOR_ARITMETICO')[1]
+        node_e = self._t()
+        # Operadores lógicos binarios
+        while (self._current_token()[0] == 'OPERATOR' and 
+               self._current_token()[1] in ('and', 'or')):
+            op_val = self._consume('OPERATOR')[1]
             parent_e = Node("E")
             parent_e.add_child(node_e)
             parent_e.add_child(Node(op_val))
@@ -456,12 +847,11 @@ class SyntacticChecking:
         return node_e
 
     def _t(self):
-        node_t = Node("T")
-        node_t.add_child(self._f())
-        # --- CAMBIO CLAVE ---
-        # Ahora comprobamos si el token es de tipo 'OPERADOR_ARITMETICO'
-        while self._current_token()[0] == 'OPERADOR_ARITMETICO' and self._current_token()[1] in ('*', '/'):
-            op_val = self._consume('OPERADOR_ARITMETICO')[1]
+        node_t = self._f()
+        # Operadores de comparación
+        while (self._current_token()[0] == 'OPERATOR' and 
+               self._current_token()[1] in ('=', '<', '>', '<=', '>=', '<>')):
+            op_val = self._consume('OPERATOR')[1]
             parent_t = Node("T")
             parent_t.add_child(node_t)
             parent_t.add_child(Node(op_val))
@@ -470,30 +860,72 @@ class SyntacticChecking:
         return node_t
 
     def _f(self):
-        kind, val = self._current_token()
-        node_f = Node("F")
-        if val == '(':
-            self._consume('PAREN')
-            node_f.add_child(self._e())
-            self._consume('PAREN')
-        elif kind == 'ID':
-            self._consume('ID')
-            id_node = Node("ID")
-            id_node.add_child(Node(val))
-            node_f.add_child(id_node)
-        # --- CAMBIO CLAVE ---
-        # Ahora esperamos 'NUMERO_ENTERO' en lugar de 'NUM'
-        elif kind == 'NUMERO_ENTERO':
-            self._consume('NUMERO_ENTERO')
-            num_node = Node("NUM") # Mantenemos 'NUM' en el árbol por simplicidad gramatical
-            num_node.add_child(Node(val))
-            node_f.add_child(num_node)
-        else:
-            raise ValueError(f"Sintaxis inválida, se esperaba ID, NUMERO_ENTERO o '(', se encontró {kind}")
+        node_f = self._g()
+        # Operadores + y -
+        while (self._current_token()[0] == 'OPERATOR' and 
+               self._current_token()[1] in ('+', '-')):
+            op_val = self._consume('OPERATOR')[1]
+            parent_f = Node("F")
+            parent_f.add_child(node_f)
+            parent_f.add_child(Node(op_val))
+            parent_f.add_child(self._g())
+            node_f = parent_f
         return node_f
 
+    def _g(self):
+        node_g = self._h()
+        # Operadores * y /
+        while (self._current_token()[0] == 'OPERATOR' and 
+               self._current_token()[1] in ('*', '/')):
+            op_val = self._consume('OPERATOR')[1]
+            parent_g = Node("G")
+            parent_g.add_child(node_g)
+            parent_g.add_child(Node(op_val))
+            parent_g.add_child(self._h())
+            node_g = parent_g
+        return node_g
+
+    def _h(self):
+        # Manejar operador unario 'not'
+        if (self._current_token()[0] == 'OPERATOR' and 
+            self._current_token()[1] == 'not'):
+            op_val = self._consume('OPERATOR')[1]
+            node_h = Node("H")
+            node_h.add_child(Node(op_val))
+            node_h.add_child(self._h())  # Aplicar 'not' a la siguiente expresión
+            return node_h
+        
+        return self._i()
+
+    def _i(self):
+        kind, val = self._current_token()
+        node_i = Node("I")
+        if val == '(':
+            self._consume()  # Consumir '('
+            node_i.add_child(self._e())  # IMPORTANTE: llamar a _e() no a _i()
+            if self._current_token()[1] != ')':
+                raise ValueError(f"Error de sintaxis: Se esperaba ')' pero se encontró {self._current_token()}")
+            self._consume()  # Consumir ')'
+        elif kind == 'IDENTIFIER':
+            self._consume('IDENTIFIER')
+            id_node = Node("ID")
+            id_node.add_child(Node(val))
+            node_i.add_child(id_node)
+        elif kind == 'CONSTANT':
+            self._consume('CONSTANT')
+            num_node = Node("NUM")
+            num_node.add_child(Node(val))
+            node_i.add_child(num_node)
+        elif kind == 'STRING':
+            self._consume('STRING')
+            str_node = Node("STRING")
+            str_node.add_child(Node(val))
+            node_i.add_child(str_node)
+        else:
+            raise ValueError(f"Sintaxis inválida, se esperaba IDENTIFIER, CONSTANT, STRING o '(', se encontró {kind} ('{val}')")
+        return node_i
+
     def _generate_markdown(self, root_node):
-        # (El código de esta función no necesita cambios)
         md = "### 1.2.2. Comprobación Sintáctica / Comprobación de Tipos\n\n"
         md += "La secuencia de tokens es válida según la gramática. Se genera el siguiente árbol de derivación:\n\n"
         md += "```mermaid\n"
@@ -516,18 +948,25 @@ class SyntacticChecking:
 ## `compiler\syntax_analizer.py`
 
 ```python
-# compiler/syntax_analyzer.py
+# compiler/syntax_analizer.py
 
 import re
 
 # --- Definiciones de Operadores ---
 precedence = {
     ':=': 0,
-    '+': 1, '-': 1,
-    '*': 2, '/': 2
+    'and': 1, 'or': 1,                          # Operadores lógicos binarios
+    'not': 2,                                   # Operador lógico unario (alta precedencia)
+    '=': 3, '<': 3, '>': 3, '<=': 3, '>=': 3, '<>': 3,  # Operadores de comparación
+    '+': 4, '-': 4,
+    '*': 5, '/': 5
 }
+
 associativity = {
     ':=': 'right',
+    'and': 'left', 'or': 'left',
+    'not': 'right',  # 'not' es asociativo por la derecha
+    '=': 'left', '<': 'left', '>': 'left', '<=': 'left', '>=': 'left', '<>': 'left',
     '+': 'left', '-': 'left',
     '*': 'left', '/': 'left'
 }
@@ -567,23 +1006,35 @@ class SyntaxAnalyzer:
         stack = []
         
         for kind, value in self.tokens:
-            if kind in ['ID', 'NUMERO_ENTERO']:
+            # ACTUALIZADO: Incluir 'STRING' como operando
+            if kind in ['IDENTIFIER', 'CONSTANT', 'STRING']:
                 output.append(value)
-            elif value in precedence: # Es un operador
-                while (stack and stack[-1] in precedence and
-                       ((associativity[value] == 'left' and precedence[stack[-1]] >= precedence[value]) or
-                        (associativity[value] == 'right' and precedence[stack[-1]] > precedence[value]))):
-                    output.append(stack.pop())
-                stack.append(value)
+            elif value in precedence:  # Es un operador
+                # Manejar operadores unarios (como 'not')
+                if value == 'not':
+                    stack.append(value)
+                else:
+                    while (stack and stack[-1] in precedence and
+                           ((associativity[value] == 'left' and precedence[stack[-1]] >= precedence[value]) or
+                            (associativity[value] == 'right' and precedence[stack[-1]] > precedence[value]))):
+                        output.append(stack.pop())
+                    stack.append(value)
             elif value == '(':
                 stack.append(value)
             elif value == ')':
                 while stack and stack[-1] != '(':
                     output.append(stack.pop())
-                stack.pop() # Quitar '(' de la pila
+                if stack and stack[-1] == '(':
+                    stack.pop()  # Quitar '(' de la pila
+                else:
+                    raise ValueError("Paréntesis de cierre sin apertura correspondiente")
         
         while stack:
-            output.append(stack.pop())
+            token = stack.pop()
+            if token == '(':
+                raise ValueError("Paréntesis de apertura sin cierre correspondiente")
+            output.append(token)
+            
         return output
 
     def _build_tree(self, postfix_tokens):
@@ -593,16 +1044,22 @@ class SyntaxAnalyzer:
         
         for token in postfix_tokens:
             if token in operators:
-                if len(stack) < 2:
-                    raise ValueError(f"Error de sintaxis: Operador '{token}' sin suficientes operandos.")
-                right = stack.pop()
-                left = stack.pop()
-                stack.append(Node(token, left, right))
-            else: # Es un operando
+                if token == 'not':  # Operador unario
+                    if len(stack) < 1:
+                        raise ValueError(f"Error de sintaxis: Operador unario '{token}' sin operando. Stack: {stack}")
+                    operand = stack.pop()
+                    stack.append(Node(token, operand, None))  # Solo hijo izquierdo
+                else:  # Operador binario
+                    if len(stack) < 2:
+                        raise ValueError(f"Error de sintaxis: Operador '{token}' sin suficientes operandos. Stack: {stack}")
+                    right = stack.pop()
+                    left = stack.pop()
+                    stack.append(Node(token, left, right))
+            else:  # Es un operando
                 stack.append(Node(token))
         
-        if not stack:
-             raise ValueError("Error de sintaxis: Expresión vacía o inválida.")
+        if len(stack) != 1:
+            raise ValueError(f"Error de sintaxis: Expresión inválida. Stack final: {stack}")
         return stack[0]
 
     def _generate_markdown(self, root, postfix_tokens):
@@ -618,9 +1075,9 @@ class SyntaxAnalyzer:
             lines = []
             # Estilo para el nodo actual
             if node.value in precedence:
-                lines.append(f"    {node.id}(('{node.value}'))") # Círculo para operadores
+                lines.append(f"    {node.id}(('{node.value}'))")  # Círculo para operadores
             else:
-                lines.append(f"    {node.id}(('{node.value}'))") # Rectángulo para operandos
+                lines.append(f"    {node.id}(['{node.value}'])")  # Rectángulo para operandos
             
             # Conexiones con los hijos
             if node.left:

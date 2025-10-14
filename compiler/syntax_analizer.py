@@ -1,15 +1,22 @@
-# compiler/syntax_analyzer.py
+# compiler/syntax_analizer.py
 
 import re
 
 # --- Definiciones de Operadores ---
 precedence = {
     ':=': 0,
-    '+': 1, '-': 1,
-    '*': 2, '/': 2
+    'and': 1, 'or': 1,                          # Operadores lógicos binarios
+    'not': 2,                                   # Operador lógico unario (alta precedencia)
+    '=': 3, '<': 3, '>': 3, '<=': 3, '>=': 3, '<>': 3,  # Operadores de comparación
+    '+': 4, '-': 4,
+    '*': 5, '/': 5
 }
+
 associativity = {
     ':=': 'right',
+    'and': 'left', 'or': 'left',
+    'not': 'right',  # 'not' es asociativo por la derecha
+    '=': 'left', '<': 'left', '>': 'left', '<=': 'left', '>=': 'left', '<>': 'left',
     '+': 'left', '-': 'left',
     '*': 'left', '/': 'left'
 }
@@ -49,23 +56,35 @@ class SyntaxAnalyzer:
         stack = []
         
         for kind, value in self.tokens:
-            if kind in ['ID', 'NUMERO_ENTERO']:
+            # ACTUALIZADO: Incluir 'STRING' como operando
+            if kind in ['IDENTIFIER', 'CONSTANT', 'STRING']:
                 output.append(value)
-            elif value in precedence: # Es un operador
-                while (stack and stack[-1] in precedence and
-                       ((associativity[value] == 'left' and precedence[stack[-1]] >= precedence[value]) or
-                        (associativity[value] == 'right' and precedence[stack[-1]] > precedence[value]))):
-                    output.append(stack.pop())
-                stack.append(value)
+            elif value in precedence:  # Es un operador
+                # Manejar operadores unarios (como 'not')
+                if value == 'not':
+                    stack.append(value)
+                else:
+                    while (stack and stack[-1] in precedence and
+                           ((associativity[value] == 'left' and precedence[stack[-1]] >= precedence[value]) or
+                            (associativity[value] == 'right' and precedence[stack[-1]] > precedence[value]))):
+                        output.append(stack.pop())
+                    stack.append(value)
             elif value == '(':
                 stack.append(value)
             elif value == ')':
                 while stack and stack[-1] != '(':
                     output.append(stack.pop())
-                stack.pop() # Quitar '(' de la pila
+                if stack and stack[-1] == '(':
+                    stack.pop()  # Quitar '(' de la pila
+                else:
+                    raise ValueError("Paréntesis de cierre sin apertura correspondiente")
         
         while stack:
-            output.append(stack.pop())
+            token = stack.pop()
+            if token == '(':
+                raise ValueError("Paréntesis de apertura sin cierre correspondiente")
+            output.append(token)
+            
         return output
 
     def _build_tree(self, postfix_tokens):
@@ -75,16 +94,22 @@ class SyntaxAnalyzer:
         
         for token in postfix_tokens:
             if token in operators:
-                if len(stack) < 2:
-                    raise ValueError(f"Error de sintaxis: Operador '{token}' sin suficientes operandos.")
-                right = stack.pop()
-                left = stack.pop()
-                stack.append(Node(token, left, right))
-            else: # Es un operando
+                if token == 'not':  # Operador unario
+                    if len(stack) < 1:
+                        raise ValueError(f"Error de sintaxis: Operador unario '{token}' sin operando. Stack: {stack}")
+                    operand = stack.pop()
+                    stack.append(Node(token, operand, None))  # Solo hijo izquierdo
+                else:  # Operador binario
+                    if len(stack) < 2:
+                        raise ValueError(f"Error de sintaxis: Operador '{token}' sin suficientes operandos. Stack: {stack}")
+                    right = stack.pop()
+                    left = stack.pop()
+                    stack.append(Node(token, left, right))
+            else:  # Es un operando
                 stack.append(Node(token))
         
-        if not stack:
-             raise ValueError("Error de sintaxis: Expresión vacía o inválida.")
+        if len(stack) != 1:
+            raise ValueError(f"Error de sintaxis: Expresión inválida. Stack final: {stack}")
         return stack[0]
 
     def _generate_markdown(self, root, postfix_tokens):
@@ -100,9 +125,9 @@ class SyntaxAnalyzer:
             lines = []
             # Estilo para el nodo actual
             if node.value in precedence:
-                lines.append(f"    {node.id}(('{node.value}'))") # Círculo para operadores
+                lines.append(f"    {node.id}(('{node.value}'))")  # Círculo para operadores
             else:
-                lines.append(f"    {node.id}(('{node.value}'))") # Rectángulo para operandos
+                lines.append(f"    {node.id}(['{node.value}'])")  # Rectángulo para operandos
             
             # Conexiones con los hijos
             if node.left:

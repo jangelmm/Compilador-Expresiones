@@ -11,16 +11,16 @@ El código fuente se descompone en los siguientes tokens:
 
 | Tipo | Valor | ID |
 |------|-------|----|
-| IDENTIFIER | `x` | 10818 |
+| IDENTIFIER | `x` | 10875 |
 | OPERATOR | `:=` | 101 |
 | CONSTANT | `1` | None |
 | OPERATOR | `+` | 102 |
-| IDENTIFIER | `a` | 10287 |
+| IDENTIFIER | `a` | 10688 |
 | OPERATOR | `+` | 102 |
 | PAREN | `(` | None |
-| IDENTIFIER | `b` | 10876 |
+| IDENTIFIER | `b` | 10991 |
 | OPERATOR | `*` | 104 |
-| IDENTIFIER | `c` | 10476 |
+| IDENTIFIER | `c` | 10908 |
 | PAREN | `)` | None |
 | OPERATOR | `+` | 102 |
 | CONSTANT | `3` | None |
@@ -47,6 +47,15 @@ El código fuente se descompone en los siguientes tokens:
 | 103 | - |
 | 104 | * |
 | 105 | / |
+| 106 | = |
+| 107 | < |
+| 108 | > |
+| 109 | <= |
+| 110 | >= |
+| 111 | <> |
+| 112 | and |
+| 113 | or |
+| 114 | not |
 
 ### Delimitadores
 | ID | Delimitador |
@@ -60,10 +69,10 @@ El código fuente se descompone en los siguientes tokens:
 
 | ID | Nombre | Tipo | Scope | Dirección | Modo |
 |----|--------|------|-------|-----------|------|
-| 10818 | x | int | 0 | 1000 | direct |
-| 10287 | a | int | 0 | 1004 | direct |
-| 10876 | b | int | 0 | 1008 | direct |
-| 10476 | c | int | 0 | 100C | direct |
+| 10875 | x | integer | 0 | 1000 | direct |
+| 10688 | a | integer | 0 | 1004 | direct |
+| 10991 | b | integer | 0 | 1008 | direct |
+| 10908 | c | integer | 0 | 100C | direct |
 
 **Total de símbolos:** 4
 **Siguiente dirección disponible:** 1010
@@ -111,38 +120,31 @@ La secuencia de tokens es válida según la gramática. Se genera el siguiente �
 graph TD
     n0['S'] --- n1['ID']
     n0['S'] --- n3[':=']
-    n0['S'] --- n29['E']
+    n0['S'] --- n23['F']
     n1['ID'] --- n2['x']
-    n29['E'] --- n15['E']
-    n29['E'] --- n30['+']
-    n29['E'] --- n31['T']
-    n15['E'] --- n9['E']
-    n15['E'] --- n16['+']
-    n15['E'] --- n17['T']
-    n31['T'] --- n32['F']
-    n9['E'] --- n4['E']
-    n9['E'] --- n10['+']
-    n9['E'] --- n11['T']
-    n17['T'] --- n18['F']
-    n32['F'] --- n33['NUM']
-    n4['E'] --- n5['T']
-    n11['T'] --- n12['F']
-    n18['F'] --- n19['E']
-    n33['NUM'] --- n34['3']
-    n5['T'] --- n6['F']
-    n12['F'] --- n13['ID']
-    n19['E'] --- n24['T']
-    n6['F'] --- n7['NUM']
-    n13['ID'] --- n14['a']
-    n24['T'] --- n20['T']
-    n24['T'] --- n25['*']
-    n24['T'] --- n26['F']
-    n7['NUM'] --- n8['1']
-    n20['T'] --- n21['F']
-    n26['F'] --- n27['ID']
-    n21['F'] --- n22['ID']
-    n27['ID'] --- n28['c']
-    n22['ID'] --- n23['b']
+    n23['F'] --- n12['F']
+    n23['F'] --- n24['+']
+    n23['F'] --- n25['I']
+    n12['F'] --- n7['F']
+    n12['F'] --- n13['+']
+    n12['F'] --- n14['I']
+    n25['I'] --- n26['NUM']
+    n7['F'] --- n4['I']
+    n7['F'] --- n8['+']
+    n7['F'] --- n9['I']
+    n14['I'] --- n18['G']
+    n26['NUM'] --- n27['3']
+    n4['I'] --- n5['NUM']
+    n9['I'] --- n10['ID']
+    n18['G'] --- n15['I']
+    n18['G'] --- n19['*']
+    n18['G'] --- n20['I']
+    n5['NUM'] --- n6['1']
+    n10['ID'] --- n11['a']
+    n15['I'] --- n16['ID']
+    n20['I'] --- n21['ID']
+    n16['ID'] --- n17['b']
+    n21['ID'] --- n22['c']
 ```
 
 ---
@@ -154,28 +156,33 @@ Se verifica la compatibilidad de tipos recorriendo el AST. Cada nodo se anota co
 graph TD
     classDef error fill:#ffdddd,stroke:#d44,stroke-width:2px;
     classDef default fill:#ddffdd,stroke:#4d4,stroke-width:2px;
-    N10["<b>:=</b><br/><i>int</i><br/>Modo: direct"]:::default
-    N0["<b>x</b><br/><i>int</i><br/>Modo: direct<br/>Addr: 1000"]:::default
+    classDef immediate fill:#ddddff,stroke:#44d,stroke-width:2px;
+    N10["<b>:=</b><br/><i>integer</i><br/>Modo: direct"]:::default
+    N0["<b>x</b><br/><i>integer</i><br/>Modo: direct<br/>Addr: 1000"]:::default
     N10 --> N0
-    N9["<b>+</b><br/><i>int</i><br/>Modo: register"]:::default
-    N7["<b>+</b><br/><i>int</i><br/>Modo: register"]:::default
-    N3["<b>+</b><br/><i>int</i><br/>Modo: register"]:::default
-    N1["<b>1</b><br/><i>int</i><br/>Modo: immediate"]:::default
+    N9["<b>+</b><br/><i>integer</i><br/>Modo: register"]:::default
+    N7["<b>+</b><br/><i>integer</i><br/>Modo: register"]:::default
+    N3["<b>+</b><br/><i>integer</i><br/>Modo: register"]:::default
+    N1["<b>1</b><br/><i>integer</i><br/>Modo: immediate"]:::immediate
     N3 --> N1
-    N2["<b>a</b><br/><i>int</i><br/>Modo: direct<br/>Addr: 1004"]:::default
+    N2["<b>a</b><br/><i>integer</i><br/>Modo: direct<br/>Addr: 1004"]:::default
     N3 --> N2
     N7 --> N3
-    N6["<b>*</b><br/><i>int</i><br/>Modo: register"]:::default
-    N4["<b>b</b><br/><i>int</i><br/>Modo: direct<br/>Addr: 1008"]:::default
+    N6["<b>*</b><br/><i>integer</i><br/>Modo: register"]:::default
+    N4["<b>b</b><br/><i>integer</i><br/>Modo: direct<br/>Addr: 1008"]:::default
     N6 --> N4
-    N5["<b>c</b><br/><i>int</i><br/>Modo: direct<br/>Addr: 100C"]:::default
+    N5["<b>c</b><br/><i>integer</i><br/>Modo: direct<br/>Addr: 100C"]:::default
     N6 --> N5
     N7 --> N6
     N9 --> N7
-    N8["<b>3</b><br/><i>int</i><br/>Modo: immediate"]:::default
+    N8["<b>3</b><br/><i>integer</i><br/>Modo: immediate"]:::immediate
     N9 --> N8
     N10 --> N9
 ```
+
+### Resumen de Tipos en la Expresión
+
+- **integer**: 11 ocurrencias
 
 ---
 
