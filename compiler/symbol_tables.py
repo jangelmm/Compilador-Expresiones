@@ -217,6 +217,48 @@ class TypeSystem:
             return to_type in TypeSystem.CONVERSIONS[from_type]
             
         return False
+    
+    @staticmethod
+    def get_operator_tables_markdown(operators=None):
+        """
+        Genera markdown con las tablas de compatibilidad de tipos para operadores.
+        Si no se especifican operadores, genera todas las tablas disponibles.
+        """
+        md = "### Tablas de operadores\n\n"
+        
+        # Si no se especifican operadores, usar algunos comunes
+        if operators is None:
+            operators = ['+', '-', '*', '/', '=', '<>', '<', '>', '<=', '>=', 'and', 'or']
+        
+        # Tipos base para las tablas
+        base_types = ['integer', 'real', 'char', 'boolean', 'string']
+        
+        for op in operators:
+            if op in TypeSystem.TYPE_COMPATIBILITY:
+                md += f"**Tabla de \{op}**\n\n"
+                md += "|          |"
+                
+                # Encabezado de columnas
+                for col_type in base_types:
+                    md += f" {col_type} |"
+                md += "\n"
+                
+                # Separador
+                md += "|:---------|"
+                for _ in base_types:
+                    md += ":---:|"
+                md += "\n"
+                
+                # Filas de la tabla
+                for row_type in base_types:
+                    md += f"| **{row_type}** |"
+                    for col_type in base_types:
+                        result = TypeSystem.TYPE_COMPATIBILITY[op].get((row_type, col_type), "—")
+                        md += f" {result} |"
+                    md += "\n"
+                md += "\n"
+        
+        return md
 
 def generate_fixed_tables_report():
     md = "## Tablas Fijas del Lenguaje\n\n"

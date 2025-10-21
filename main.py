@@ -6,7 +6,7 @@ from compiler.symbol_tables import VariableSymbolTable
 if __name__ == "__main__":
     # Ejemplo con diferentes tipos
     expressions = [
-        # "x := 1 + a + (b * c) + 3",  # Enteros
+        "x := 1 + a + (b * c) + 3",  # Enteros
         # "result := 3.14 * radius + 2.5",  # Reales
         # "message := 'Hola ' + 'Mundo'",  # Strings
         # "flag := (x > 5) and (y < 10)",  # Booleanos

@@ -156,6 +156,8 @@ class SemanticAnalyzer:
         mermaid_lines = traverse(self.ast_root)
         md += "\n".join(mermaid_lines)
         md += "\n```\n"
+
+        md += "\n" + TypeSystem.get_operator_tables_markdown(['+', '*']) + "\n"
         
         # Agregar resumen de tipos
         md += "\n### Resumen de Tipos en la Expresión\n\n"

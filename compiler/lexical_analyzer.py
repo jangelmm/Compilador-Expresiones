@@ -5,33 +5,10 @@ from .symbol_tables import RESERVED_WORDS, OPERATORS, DELIMITERS, VariableSymbol
 
 class LexicalAnalyzer:
     """
-    Convierte una cadena de código fuente en tokens usando tablas fijas y variables.
+    Convierte una lista de lexemas en tokens usando tablas fijas y variables.
     """
-    TOKEN_SPECIFICATIONS = [
-        ('KEYWORD_VAR',         r'\bvar\b'),
-        ('KEYWORD_PROC',        r'\bproc\b'),
-        ('KEYWORD_BEGIN',       r'\bbegin\b'),
-        ('KEYWORD_END',         r'\bend\b'),
-        ('TIPO_DATO',           r'\b(integer|char|real)\b'),
-        ('STRING',              r"'[^']*'"),  # Strings entre comillas simples
-        ('ID',                  r'[a-zA-Z_]\w*'),
-        ('NUMERO_REAL',         r'\d+\.\d*|\.\d+'),  # Números reales (1.23, .5, 3.)
-        ('NUMERO_ENTERO',       r'\d+'),
-        ('OPERADOR_ASIGNACION', r':='),
-        ('OPERADOR_ARITMETICO', r'[+\-*/]'),
-        ('OPERADOR_COMPARACION', r'[<>]=?|='),  # <, >, <=, >=, =
-        ('OPERADOR_DESIGUALDAD', r'<>'),        # <>
-        ('OPERADOR_LOGICO',     r'\b(and|or|not)\b'),  # ACTUALIZADO: agregar 'not'
-        ('DELIMITADOR',         r'[:;]'),
-        ('PAREN',               r'[()]'),
-        ('SKIP',                r'[ \t\r\n]+'),
-        ('MISMATCH',            r'.'),
-    ]
-
-    TOKEN_REGEX = '|'.join('(?P<%s>%s)' % pair for pair in TOKEN_SPECIFICATIONS)
-
-    def __init__(self, code_string, symbol_table=None):
-        self.code = code_string
+    def __init__(self, lexemes, symbol_table=None):
+        self.lexemes = lexemes
         self.tokens = []
         self.symbol_table = symbol_table if symbol_table is not None else VariableSymbolTable()
 
@@ -42,73 +19,77 @@ class LexicalAnalyzer:
         return self.tokens, report
 
     def _tokenize(self):
-        """Genera una lista de tokens a partir del código fuente."""
-        for mo in re.finditer(self.TOKEN_REGEX, self.code, re.IGNORECASE):
-            kind = mo.lastgroup
-            value = mo.group()
-
-            if kind == 'SKIP':
-                continue
-            elif kind == 'MISMATCH':
-                raise ValueError(f"Caracter no reconocido: '{value}'")
-            
-            # Procesar según el tipo de token
-            if kind in ['KEYWORD_VAR', 'KEYWORD_PROC', 'KEYWORD_BEGIN', 'KEYWORD_END', 'TIPO_DATO']:
-                value = value.lower()
-                token_id = RESERVED_WORDS.get(value)
-                self.tokens.append(('RESERVED_WORD', value, token_id))
-            
-            elif kind in ['OPERADOR_ASIGNACION', 'OPERADOR_ARITMETICO', 'OPERADOR_COMPARACION', 'OPERADOR_DESIGUALDAD']:
-                token_id = OPERATORS.get(value)
-                self.tokens.append(('OPERATOR', value, token_id))
-
-            elif kind == 'OPERADOR_LOGICO':  # Manejar operadores lógicos
-                token_id = OPERATORS.get(value)
-                self.tokens.append(('OPERATOR', value, token_id))
-
-            elif kind == 'DELIMITADOR':
-                token_id = DELIMITERS.get(value)
-                self.tokens.append(('DELIMITER', value, token_id))
-
-            elif kind == 'PAREN':
-                self.tokens.append(('PAREN', value, None))
-
-            elif kind == 'NUMERO_ENTERO':
-                self.tokens.append(('CONSTANT', value, None))
-
-            elif kind == 'NUMERO_REAL':
-                self.tokens.append(('CONSTANT', value, None))
-
-            elif kind == 'STRING':
-                self.tokens.append(('STRING', value, None))
-
-            elif kind == 'ID':
-                # Verificar si el símbolo ya existe en la tabla
-                symbol_exists = False
-                for symbol_id, symbol_info in self.symbol_table.symbols.items():
-                    if symbol_info['name'] == value:
-                        symbol_exists = True
-                        break
-                
-                if not symbol_exists:
-                    # Solo agregar si no existe, usando tipo por defecto
-                    symbol_type = 'integer'
-                    self.symbol_table.add_symbol(value, symbol_type)
-                
-                # Buscar el ID del símbolo (ya sea existente o nuevo)
+        """Genera una lista de tokens a partir de la lista de lexemas."""
+        for lexeme in self.lexemes:
+            # Verificar si es palabra reservada
+            if lexeme.upper() in RESERVED_WORDS:
+                self.tokens.append(('RESERVED_WORD', lexeme, RESERVED_WORDS[lexeme.upper()]))
+            # Verificar si es operador
+            elif lexeme in OPERATORS:
+                self.tokens.append(('OPERATOR', lexeme, OPERATORS[lexeme]))
+            # Verificar si es delimitador
+            elif lexeme in DELIMITERS:
+                self.tokens.append(('DELIMITER', lexeme, DELIMITERS[lexeme]))
+            # Verificar si es número entero
+            elif lexeme.isdigit():
+                self.tokens.append(('CONSTANT', lexeme, None))
+                # Agregar a la tabla de símbolos si no existe
+                if not self.symbol_table.find_symbol_by_name(lexeme):
+                    self.symbol_table.add_symbol(lexeme, 'integer', value=lexeme)
+            # Verificar si es identificador (comienza con letra o _)
+            elif re.match(r'[a-zA-Z_][a-zA-Z0-9_]*', lexeme):
+                # Si no está en la tabla de símbolos, agregarlo
+                if not self.symbol_table.find_symbol_by_name(lexeme):
+                    self.symbol_table.add_symbol(lexeme, 'integer')  # Por defecto integer
+                # Buscar el ID del símbolo
                 symbol_id = None
                 for sid, info in self.symbol_table.symbols.items():
-                    if info['name'] == value:
+                    if info['name'] == lexeme:
                         symbol_id = sid
                         break
-                
-                self.tokens.append(('IDENTIFIER', value, symbol_id))
+                self.tokens.append(('IDENTIFIER', lexeme, symbol_id))
+            else:
+                # No se reconoce el lexema
+                raise ValueError(f"Lexema no reconocido: '{lexeme}'")
 
     def _generate_markdown(self):
-        md = "## 1.1. Análisis Lexicográfico\n\n"
-        md += "El código fuente se descompone en los siguientes tokens:\n\n"
-        md += "| Tipo | Valor | ID |\n"
-        md += "|------|-------|----|\n"
-        for kind, value, token_id in self.tokens:
-            md += f"| {kind} | `{value}` | {token_id} |\n"
+        md = "## 2. Análisis Lexicográfico\n\n"
+        md += "El **análisis léxico** toma las palabras detectadas y las clasifica según su tipo.\n"
+        md += "Para ello, el compilador compara cada lexema con **tablas de referencia**.\n\n"
+        
+        md += ">**Objetivo:**\n"
+        md += "> Convertir la secuencia de caracteres en una **secuencia de tokens** (unidades mínimas con significado).\n\n"
+        
+        md += "---\n\n"
+        md += "### Tablas consultadas\n\n"
+        
+        md += "#### a) Tabla fija (Palabras reservadas y operadores)\n\n"
+        md += "| Código | Token | Tipo |\n"
+        md += "|:------:|:-----:|:----:|\n"
+        for word, code in RESERVED_WORDS.items():
+            md += f"| {code} | `{word}` | palabra reservada |\n"
+        for op, code in OPERATORS.items():
+            md += f"| {code} | `{op}` | operador |\n"
+        for delim, code in DELIMITERS.items():
+            md += f"| {code} | `{delim}` | delimitador |\n"
+        
+        md += "\n#### b) Tabla variable (Identificadores y constantes)\n\n"
+        md += "| Posición | Lexema | Tipo | Valor |\n"
+        md += "|:--------:|:------:|:----:|:-----:|\n"
+        for symbol_id, info in self.symbol_table.symbols.items():
+            md += f"| {symbol_id} | `{info['name']}` | {info['type']} | {info.get('value', '—')} |\n"
+        
+        md += "\n---\n\n"
+        md += "### Tokens generados\n\n"
+        md += "| Tipo | Valor |\n"
+        md += "|:-----|:-----:|\n"
+        for kind, value, _ in self.tokens:
+            md += f"| {kind} | `{value}` |\n"
+        
+        md += "\n---\n\n"
+        md += "### Resultado del análisis léxico:\n\n"
+        md += "Una lista de **tokens** identificados y clasificados, sin errores.\n"
+        md += "Si existiera una palabra desconocida, el compilador la reportaría como **símbolo no reconocido**.\n\n"
+        md += "---\n"
+        
         return md

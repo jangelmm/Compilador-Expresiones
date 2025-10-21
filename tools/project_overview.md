@@ -6,6 +6,7 @@ ProcesoCompilacion
 │   ├── __init__.py
 │   ├── intermediate_code_gen.py
 │   ├── lexical_analyzer.py
+│   ├── parser.py
 │   ├── pipeline.py
 │   ├── semantic_analyzer.py
 │   ├── structures.py
@@ -34,7 +35,7 @@ from compiler.symbol_tables import VariableSymbolTable
 if __name__ == "__main__":
     # Ejemplo con diferentes tipos
     expressions = [
-        # "x := 1 + a + (b * c) + 3",  # Enteros
+        "x := 1 + a + (b * c) + 3",  # Enteros
         # "result := 3.14 * radius + 2.5",  # Reales
         # "message := 'Hola ' + 'Mundo'",  # Strings
         # "flag := (x > 5) and (y < 10)",  # Booleanos
@@ -79,7 +80,26 @@ if __name__ == "__main__":
 ## `compiler\__init__.py`
 
 ```python
-```
+# compiler/__init__.py
+
+from .parser import Parser
+from .lexical_analyzer import LexicalAnalyzer
+from .syntax_analizer import SyntaxAnalyzer
+from .syntactic_checking import SyntacticChecking
+from .semantic_analyzer import SemanticAnalyzer
+from .intermediate_code_gen import IntermediateCodeGenerator
+from .symbol_tables import VariableSymbolTable, TypeSystem
+
+__all__ = [
+    'Parser',
+    'LexicalAnalyzer', 
+    'SyntaxAnalyzer',
+    'SyntacticChecking',
+    'SemanticAnalyzer',
+    'IntermediateCodeGenerator',
+    'VariableSymbolTable',
+    'TypeSystem'
+]```
 
 ## `compiler\intermediate_code_gen.py`
 
@@ -161,33 +181,10 @@ from .symbol_tables import RESERVED_WORDS, OPERATORS, DELIMITERS, VariableSymbol
 
 class LexicalAnalyzer:
     """
-    Convierte una cadena de código fuente en tokens usando tablas fijas y variables.
+    Convierte una lista de lexemas en tokens usando tablas fijas y variables.
     """
-    TOKEN_SPECIFICATIONS = [
-        ('KEYWORD_VAR',         r'\bvar\b'),
-        ('KEYWORD_PROC',        r'\bproc\b'),
-        ('KEYWORD_BEGIN',       r'\bbegin\b'),
-        ('KEYWORD_END',         r'\bend\b'),
-        ('TIPO_DATO',           r'\b(integer|char|real)\b'),
-        ('STRING',              r"'[^']*'"),  # Strings entre comillas simples
-        ('ID',                  r'[a-zA-Z_]\w*'),
-        ('NUMERO_REAL',         r'\d+\.\d*|\.\d+'),  # Números reales (1.23, .5, 3.)
-        ('NUMERO_ENTERO',       r'\d+'),
-        ('OPERADOR_ASIGNACION', r':='),
-        ('OPERADOR_ARITMETICO', r'[+\-*/]'),
-        ('OPERADOR_COMPARACION', r'[<>]=?|='),  # <, >, <=, >=, =
-        ('OPERADOR_DESIGUALDAD', r'<>'),        # <>
-        ('OPERADOR_LOGICO',     r'\b(and|or|not)\b'),  # ACTUALIZADO: agregar 'not'
-        ('DELIMITADOR',         r'[:;]'),
-        ('PAREN',               r'[()]'),
-        ('SKIP',                r'[ \t\r\n]+'),
-        ('MISMATCH',            r'.'),
-    ]
-
-    TOKEN_REGEX = '|'.join('(?P<%s>%s)' % pair for pair in TOKEN_SPECIFICATIONS)
-
-    def __init__(self, code_string, symbol_table=None):
-        self.code = code_string
+    def __init__(self, lexemes, symbol_table=None):
+        self.lexemes = lexemes
         self.tokens = []
         self.symbol_table = symbol_table if symbol_table is not None else VariableSymbolTable()
 
@@ -198,75 +195,152 @@ class LexicalAnalyzer:
         return self.tokens, report
 
     def _tokenize(self):
-        """Genera una lista de tokens a partir del código fuente."""
-        for mo in re.finditer(self.TOKEN_REGEX, self.code, re.IGNORECASE):
-            kind = mo.lastgroup
-            value = mo.group()
-
-            if kind == 'SKIP':
-                continue
-            elif kind == 'MISMATCH':
-                raise ValueError(f"Caracter no reconocido: '{value}'")
-            
-            # Procesar según el tipo de token
-            if kind in ['KEYWORD_VAR', 'KEYWORD_PROC', 'KEYWORD_BEGIN', 'KEYWORD_END', 'TIPO_DATO']:
-                value = value.lower()
-                token_id = RESERVED_WORDS.get(value)
-                self.tokens.append(('RESERVED_WORD', value, token_id))
-            
-            elif kind in ['OPERADOR_ASIGNACION', 'OPERADOR_ARITMETICO', 'OPERADOR_COMPARACION', 'OPERADOR_DESIGUALDAD']:
-                token_id = OPERATORS.get(value)
-                self.tokens.append(('OPERATOR', value, token_id))
-
-            elif kind == 'OPERADOR_LOGICO':  # Manejar operadores lógicos
-                token_id = OPERATORS.get(value)
-                self.tokens.append(('OPERATOR', value, token_id))
-
-            elif kind == 'DELIMITADOR':
-                token_id = DELIMITERS.get(value)
-                self.tokens.append(('DELIMITER', value, token_id))
-
-            elif kind == 'PAREN':
-                self.tokens.append(('PAREN', value, None))
-
-            elif kind == 'NUMERO_ENTERO':
-                self.tokens.append(('CONSTANT', value, None))
-
-            elif kind == 'NUMERO_REAL':
-                self.tokens.append(('CONSTANT', value, None))
-
-            elif kind == 'STRING':
-                self.tokens.append(('STRING', value, None))
-
-            elif kind == 'ID':
-                # Verificar si el símbolo ya existe en la tabla
-                symbol_exists = False
-                for symbol_id, symbol_info in self.symbol_table.symbols.items():
-                    if symbol_info['name'] == value:
-                        symbol_exists = True
-                        break
-                
-                if not symbol_exists:
-                    # Solo agregar si no existe, usando tipo por defecto
-                    symbol_type = 'integer'
-                    self.symbol_table.add_symbol(value, symbol_type)
-                
-                # Buscar el ID del símbolo (ya sea existente o nuevo)
+        """Genera una lista de tokens a partir de la lista de lexemas."""
+        for lexeme in self.lexemes:
+            # Verificar si es palabra reservada
+            if lexeme.upper() in RESERVED_WORDS:
+                self.tokens.append(('RESERVED_WORD', lexeme, RESERVED_WORDS[lexeme.upper()]))
+            # Verificar si es operador
+            elif lexeme in OPERATORS:
+                self.tokens.append(('OPERATOR', lexeme, OPERATORS[lexeme]))
+            # Verificar si es delimitador
+            elif lexeme in DELIMITERS:
+                self.tokens.append(('DELIMITER', lexeme, DELIMITERS[lexeme]))
+            # Verificar si es número entero
+            elif lexeme.isdigit():
+                self.tokens.append(('CONSTANT', lexeme, None))
+                # Agregar a la tabla de símbolos si no existe
+                if not self.symbol_table.find_symbol_by_name(lexeme):
+                    self.symbol_table.add_symbol(lexeme, 'integer', value=lexeme)
+            # Verificar si es identificador (comienza con letra o _)
+            elif re.match(r'[a-zA-Z_][a-zA-Z0-9_]*', lexeme):
+                # Si no está en la tabla de símbolos, agregarlo
+                if not self.symbol_table.find_symbol_by_name(lexeme):
+                    self.symbol_table.add_symbol(lexeme, 'integer')  # Por defecto integer
+                # Buscar el ID del símbolo
                 symbol_id = None
                 for sid, info in self.symbol_table.symbols.items():
-                    if info['name'] == value:
+                    if info['name'] == lexeme:
                         symbol_id = sid
                         break
-                
-                self.tokens.append(('IDENTIFIER', value, symbol_id))
+                self.tokens.append(('IDENTIFIER', lexeme, symbol_id))
+            else:
+                # No se reconoce el lexema
+                raise ValueError(f"Lexema no reconocido: '{lexeme}'")
 
     def _generate_markdown(self):
-        md = "## 1.1. Análisis Lexicográfico\n\n"
-        md += "El código fuente se descompone en los siguientes tokens:\n\n"
-        md += "| Tipo | Valor | ID |\n"
-        md += "|------|-------|----|\n"
-        for kind, value, token_id in self.tokens:
-            md += f"| {kind} | `{value}` | {token_id} |\n"
+        md = "## 2. Análisis Lexicográfico\n\n"
+        md += "El **análisis léxico** toma las palabras detectadas y las clasifica según su tipo.\n"
+        md += "Para ello, el compilador compara cada lexema con **tablas de referencia**.\n\n"
+        
+        md += ">**Objetivo:**\n"
+        md += "> Convertir la secuencia de caracteres en una **secuencia de tokens** (unidades mínimas con significado).\n\n"
+        
+        md += "---\n\n"
+        md += "### Tablas consultadas\n\n"
+        
+        md += "#### a) Tabla fija (Palabras reservadas y operadores)\n\n"
+        md += "| Código | Token | Tipo |\n"
+        md += "|:------:|:-----:|:----:|\n"
+        for word, code in RESERVED_WORDS.items():
+            md += f"| {code} | `{word}` | palabra reservada |\n"
+        for op, code in OPERATORS.items():
+            md += f"| {code} | `{op}` | operador |\n"
+        for delim, code in DELIMITERS.items():
+            md += f"| {code} | `{delim}` | delimitador |\n"
+        
+        md += "\n#### b) Tabla variable (Identificadores y constantes)\n\n"
+        md += "| Posición | Lexema | Tipo | Valor |\n"
+        md += "|:--------:|:------:|:----:|:-----:|\n"
+        for symbol_id, info in self.symbol_table.symbols.items():
+            md += f"| {symbol_id} | `{info['name']}` | {info['type']} | {info.get('value', '—')} |\n"
+        
+        md += "\n---\n\n"
+        md += "### Tokens generados\n\n"
+        md += "| Tipo | Valor |\n"
+        md += "|:-----|:-----:|\n"
+        for kind, value, _ in self.tokens:
+            md += f"| {kind} | `{value}` |\n"
+        
+        md += "\n---\n\n"
+        md += "### Resultado del análisis léxico:\n\n"
+        md += "Una lista de **tokens** identificados y clasificados, sin errores.\n"
+        md += "Si existiera una palabra desconocida, el compilador la reportaría como **símbolo no reconocido**.\n\n"
+        md += "---\n"
+        
+        return md```
+
+## `compiler\parser.py`
+
+```python
+# compiler/parser.py
+
+class Parser:
+    """
+    Realiza el parseo (lectura de caracteres) del código fuente.
+    Segmenta el flujo de caracteres en lexemas usando delimitadores.
+    """
+    def __init__(self, code_string):
+        self.code = code_string
+        self.characters = []
+        self.lexemes = []
+
+    def parse(self):
+        """Realiza el parseo y devuelve la lista de lexemas."""
+        # Guardar secuencia de caracteres
+        self.characters = list(self.code)
+        
+        # Segmentar en lexemas usando delimitadores
+        current_lexeme = ''
+        for char in self.code:
+            if char in [' ', ':', '=', '+', '-', '*', '/', '(', ')', ';']:
+                # Si encontramos un delimitador, añadimos el lexema actual (si existe) y el delimitador
+                if current_lexeme:
+                    self.lexemes.append(current_lexeme)
+                    current_lexeme = ''
+                if char != ' ':  # Los espacios no se incluyen como lexemas
+                    self.lexemes.append(char)
+            else:
+                current_lexeme += char
+        
+        # Añadir el último lexema si existe
+        if current_lexeme:
+            self.lexemes.append(current_lexeme)
+            
+        return self.lexemes
+
+    def generate_markdown(self):
+        """Genera el reporte Markdown para la fase de parseo."""
+        md = "## 1. Parseo (Lectura del código fuente)\n\n"
+        md += "También llamado **análisis de entrada**, es el paso más bajo del compilador.\n"
+        md += "El compilador **no recibe palabras**, sino una **secuencia de caracteres**.\n\n"
+        
+        md += "> **Objetivo:**\n"
+        md += "> Identificar los **límites de las palabras** (tokens potenciales) usando **delimitadores** como espacios, comas, puntos y comas, o paréntesis.\n\n"
+        
+        md += "**Ejemplo:**\n\n"
+        md += "```\n"
+        md += f"{self.code}\n"
+        md += "```\n\n"
+        
+        md += "El parser lee carácter por carácter:\n\n"
+        md += "| Paso | Carácter |\n"
+        md += "|:----:|:--------:|\n"
+        
+        for i, char in enumerate(self.characters, 1):
+            if char == ' ':
+                md += f"| {i} | ` ` (espacio) |\n"
+            else:
+                md += f"| {i} | `{char}` |\n"
+        
+        md += f"| {len(self.characters) + 1} | fin de línea |\n\n"
+        
+        md += "**Lexemas identificados:**\n"
+        md += f"{' '.join(self.lexemes)}\n\n"
+        
+        md += " En esta etapa **no se evalúa nada**, solo se **segmenta** el flujo de caracteres en **palabras válidas (lexemas)**.\n\n"
+        md += "---\n"
+        
         return md```
 
 ## `compiler\pipeline.py`
@@ -274,6 +348,7 @@ class LexicalAnalyzer:
 ```python
 # compiler/pipeline.py
 
+from .parser import Parser
 from .lexical_analyzer import LexicalAnalyzer
 from .syntax_analizer import SyntaxAnalyzer
 from .syntactic_checking import SyntacticChecking
@@ -285,45 +360,67 @@ class CompilationPipeline:
     def __init__(self, expression, symbol_table=None):
         self.expression = expression
         self.symbol_table = symbol_table
-        self.report = f"# Reporte de Compilación para la Expresión\n\n`{expression}`\n\n---\n"
+        self.report = "# Proceso de Compilación\n\n"
+        self.report += f"**Expresión:** `{expression}`\n\n"
+        self.report += "---\n"
 
     def run(self):
-        self.report += "\n# Fase 1: Análisis\n"
+        # Fase 1: Parseo
+        self.report += "\n"
+        print("Iniciando Fase 1: Parseo...")
+        parser = Parser(self.expression)
+        lexemes = parser.parse()
+        self.report += parser.generate_markdown() + "\n"
 
-        print("Iniciando Fase 1.1: Análisis Lexicográfico...")
-        # MODIFICACIÓN: Pasar la tabla de símbolos al LexicalAnalyzer si existe
-        lex_analyzer = LexicalAnalyzer(self.expression, self.symbol_table)
+        # Fase 2: Análisis Lexicográfico
+        self.report += "\n"
+        print("Iniciando Fase 2: Análisis Lexicográfico...")
+        lex_analyzer = LexicalAnalyzer(lexemes, self.symbol_table)
         tokens, lex_report = lex_analyzer.analyze()
-        self.report += lex_report + "\n---\n"
+        self.report += lex_report + "\n"
 
-        # AGREGAR reportes de tablas
-        self.report += generate_fixed_tables_report() + "\n"
-        self.report += lex_analyzer.symbol_table.generate_markdown_report() + "\n---\n"
+        # Fase 3: Análisis Sintáctico
+        self.report += "\n## 3. Análisis Sintáctico\n\n"
+        print("Iniciando Fase 3: Análisis Sintáctico...")
 
-        self.report += "\n## Fase 1.2: Análisis Sintáctico\n"
-
-        print("Iniciando Fase 1.2.1: Generación de Árbol de Expresión...")
+        # 3.1 Generación de Árbol de Expresión (AST)
+        print("Iniciando Fase 3.1: Generación de Árbol de Expresión...")
         syntax_tokens = [(kind, value) for kind, value, _ in tokens]
         syntax_analyzer = SyntaxAnalyzer(syntax_tokens)
         ast_root, syntax_report = syntax_analyzer.analyze()
-        self.report += syntax_report + "\n---\n"
+        self.report += syntax_report + "\n"
 
-        print("Iniciando Fase 1.2.2: Comprobación Sintáctica (Árbol de Derivación)...")
+        # 3.2 Comprobación Sintáctica (Árbol de Derivación)
+        print("Iniciando Fase 3.2: Comprobación Sintáctica...")
         sc_analizer = SyntacticChecking(syntax_tokens)
         parse_tree, sc_report = sc_analizer.analyze()
-        self.report += sc_report + "\n---\n"
+        self.report += sc_report + "\n"
 
-        print("Iniciando Fase 1.3: Análisis Semántico...")
+        # Fase 4: Análisis Semántico
+        self.report += "\n## 4. Análisis Semántico\n\n"
+        print("Iniciando Fase 4: Análisis Semántico...")
         semantic_analyzer = SemanticAnalyzer(ast_root, lex_analyzer.symbol_table)
         annotated_ast, semantic_report = semantic_analyzer.analyze()
-        self.report += semantic_report + "\n---\n"
+        self.report += semantic_report + "\n"
 
-        self.report += "\n# Fase 2: Síntesis\n"
-
-        print("Iniciando Fase 2.1: Generación de Código Intermedio...")
+        # Fase 5: Síntesis (Generación de Código Intermedio)
+        self.report += "\n## 5. Síntesis (Generación de Código Intermedio)\n\n"
+        print("Iniciando Fase 5: Generación de Código Intermedio...")
         icg = IntermediateCodeGenerator(annotated_ast)
         icg_report = icg.generate()
         self.report += icg_report
+
+        # Conclusión
+        self.report += "\n# Conclusión\n\n"
+        self.report += "El proceso de compilación consta de **etapas secuenciales**, donde cada una garantiza la corrección del código antes de pasar a la siguiente:\n\n"
+        self.report += "| Etapa | Propósito | Ejemplo |\n"
+        self.report += "|:------|:----------|:--------|\n"
+        self.report += "| **Parseo** | Lee caracteres y forma palabras | `x := 1 + a + (b * c) + 3` |\n"
+        self.report += "| **Análisis Léxico** | Clasifica tokens | `ID`, `NUM`, `+`, `*`, `:=` |\n"
+        self.report += "| **Análisis Sintáctico** | Verifica reglas gramaticales | Árbol de expresión |\n"
+        self.report += "| **Análisis Semántico** | Verifica tipos y operaciones | Error o validación de tipos |\n"
+        self.report += "| **Síntesis** | Genera código intermedio | Tripletas o cuádruplas |\n\n"
+        self.report += "---\n"
 
     def save_report(self, filename="reports/reporte_compilacion.md"):
         import os
@@ -493,6 +590,8 @@ class SemanticAnalyzer:
         mermaid_lines = traverse(self.ast_root)
         md += "\n".join(mermaid_lines)
         md += "\n```\n"
+
+        md += "\n" + TypeSystem.get_operator_tables_markdown(['+', '*']) + "\n"
         
         # Agregar resumen de tipos
         md += "\n### Resumen de Tipos en la Expresión\n\n"
@@ -755,6 +854,48 @@ class TypeSystem:
             return to_type in TypeSystem.CONVERSIONS[from_type]
             
         return False
+    
+    @staticmethod
+    def get_operator_tables_markdown(operators=None):
+        """
+        Genera markdown con las tablas de compatibilidad de tipos para operadores.
+        Si no se especifican operadores, genera todas las tablas disponibles.
+        """
+        md = "### Tablas de operadores\n\n"
+        
+        # Si no se especifican operadores, usar algunos comunes
+        if operators is None:
+            operators = ['+', '-', '*', '/', '=', '<>', '<', '>', '<=', '>=', 'and', 'or']
+        
+        # Tipos base para las tablas
+        base_types = ['integer', 'real', 'char', 'boolean', 'string']
+        
+        for op in operators:
+            if op in TypeSystem.TYPE_COMPATIBILITY:
+                md += f"**Tabla de {op}**\n\n"
+                md += "|          |"
+                
+                # Encabezado de columnas
+                for col_type in base_types:
+                    md += f" {col_type} |"
+                md += "\n"
+                
+                # Separador
+                md += "|:---------|"
+                for _ in base_types:
+                    md += ":---:|"
+                md += "\n"
+                
+                # Filas de la tabla
+                for row_type in base_types:
+                    md += f"| **{row_type}** |"
+                    for col_type in base_types:
+                        result = TypeSystem.TYPE_COMPATIBILITY[op].get((row_type, col_type), "—")
+                        md += f" {result} |"
+                    md += "\n"
+                md += "\n"
+        
+        return md
 
 def generate_fixed_tables_report():
     md = "## Tablas Fijas del Lenguaje\n\n"
