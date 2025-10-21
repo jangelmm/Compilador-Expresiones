@@ -54,8 +54,7 @@ class IntermediateCodeGenerator:
         return left + right + [node.value]
 
     def _generate_markdown(self, postfix_list, triples_list):
-        md = "## 3. Representación Intermedia\n\n"
-        md += "### Notación Postfija (Polaca Inversa)\n"
+        md = "### Notación Postfija (Polaca Inversa)\n"
         md += f"`{' '.join(postfix_list)}`\n\n"
         md += "### Tripletas\n"
         md += "La expresión se traduce en la siguiente secuencia de instrucciones de tres direcciones:\n\n"

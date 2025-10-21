@@ -102,12 +102,12 @@ Para ello, el compilador compara cada lexema con **tablas de referencia**.
 
 | Posición | Lexema | Tipo | Valor |
 |:--------:|:------:|:----:|:-----:|
-| 10339 | `x` | integer | None |
-| 10862 | `a` | integer | None |
-| 10042 | `b` | integer | None |
-| 10157 | `c` | integer | None |
-| 10890 | `1` | integer | 1 |
-| 10746 | `3` | integer | 3 |
+| 10436 | `x` | integer | None |
+| 10974 | `a` | integer | None |
+| 10418 | `b` | integer | None |
+| 10983 | `c` | integer | None |
+| 10230 | `1` | integer | 1 |
+| 10672 | `3` | integer | 3 |
 
 ---
 
@@ -245,8 +245,6 @@ graph TD
 
 
 ## 5. Síntesis (Generación de Código Intermedio)
-
-## 3. Representación Intermedia
 
 ### Notación Postfija (Polaca Inversa)
 `x 1 a + b c * + 3 + =`
