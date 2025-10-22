@@ -43,6 +43,7 @@ class CompilationPipeline:
         self.report += syntax_report + "\n"
 
         # 3.2 Comprobación Sintáctica (Árbol de Derivación)
+        self.report += "\n### 3.2. Comprobación Sintáctica / Comprobación de Tipos\n\n"
         print("Iniciando Fase 3.2: Comprobación Sintáctica...")
         sc_analizer = SyntacticChecking(syntax_tokens)
         parse_tree, sc_report = sc_analizer.analyze()

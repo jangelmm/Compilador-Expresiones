@@ -17,16 +17,28 @@ class Parser:
         
         # Segmentar en lexemas usando delimitadores
         current_lexeme = ''
-        for char in self.code:
+        i = 0
+        while i < len(self.code):
+            char = self.code[i]
+            
             if char in [' ', ':', '=', '+', '-', '*', '/', '(', ')', ';']:
-                # Si encontramos un delimitador, añadimos el lexema actual (si existe) y el delimitador
+                # Si encontramos un delimitador, añadimos el lexema actual (si existe)
                 if current_lexeme:
                     self.lexemes.append(current_lexeme)
                     current_lexeme = ''
-                if char != ' ':  # Los espacios no se incluyen como lexemas
+                
+                # Caso especial: operador de asignación ':=' 
+                if char == ':' and i + 1 < len(self.code) and self.code[i + 1] == '=':
+                    self.lexemes.append(':=')
+                    i += 2  # Saltar el siguiente carácter '='
+                    continue
+                elif char != ' ':  # Los espacios no se incluyen como lexemas
                     self.lexemes.append(char)
+                
+                i += 1
             else:
                 current_lexeme += char
+                i += 1
         
         # Añadir el último lexema si existe
         if current_lexeme:

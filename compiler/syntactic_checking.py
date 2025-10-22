@@ -15,9 +15,8 @@ class SyntacticChecking:
             report = self._generate_markdown(parse_tree)
             return parse_tree, report
         except Exception as e:
-            # Si hay error, generar un reporte de error
-            error_report = f"### 1.2.2. Comprobación Sintáctica / Comprobación de Tipos\n\n"
-            error_report += f"**Error de sintaxis:** {str(e)}\n\n"
+            # Si hay error, generar un reporte de error (sin título duplicado)
+            error_report = f"**Error de sintaxis:** {str(e)}\n\n"
             error_report += "La secuencia de tokens no pudo ser validada completamente por la gramática.\n"
             return None, error_report
 
@@ -145,8 +144,7 @@ class SyntacticChecking:
         return node_i
 
     def _generate_markdown(self, root_node):
-        md = "### 1.2.2. Comprobación Sintáctica / Comprobación de Tipos\n\n"
-        md += "La secuencia de tokens es válida según la gramática. Se genera el siguiente árbol de derivación:\n\n"
+        md = "La secuencia de tokens es válida según la gramática. Se genera el siguiente árbol de derivación:\n\n"
         md += "```mermaid\n"
         md += "graph TD\n"
         

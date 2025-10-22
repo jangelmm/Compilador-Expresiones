@@ -49,7 +49,7 @@ El parser lee carácter por carácter:
 | 25 | fin de línea |
 
 **Lexemas identificados:**
-x : = 1 + a + ( b * c ) + 3
+x := 1 + a + ( b * c ) + 3
 
  En esta etapa **no se evalúa nada**, solo se **segmenta** el flujo de caracteres en **palabras válidas (lexemas)**.
 
@@ -102,12 +102,12 @@ Para ello, el compilador compara cada lexema con **tablas de referencia**.
 
 | Posición | Lexema | Tipo | Valor |
 |:--------:|:------:|:----:|:-----:|
-| 10436 | `x` | integer | None |
-| 10974 | `a` | integer | None |
-| 10418 | `b` | integer | None |
-| 10983 | `c` | integer | None |
-| 10230 | `1` | integer | 1 |
-| 10672 | `3` | integer | 3 |
+| 10138 | `x` | integer | None |
+| 10842 | `a` | integer | None |
+| 10264 | `b` | integer | None |
+| 10294 | `c` | integer | None |
+| 10624 | `1` | integer | 1 |
+| 10962 | `3` | integer | 3 |
 
 ---
 
@@ -116,8 +116,7 @@ Para ello, el compilador compara cada lexema con **tablas de referencia**.
 | Tipo | Valor |
 |:-----|:-----:|
 | IDENTIFIER | `x` |
-| DELIMITER | `:` |
-| OPERATOR | `=` |
+| OPERATOR | `:=` |
 | CONSTANT | `1` |
 | OPERATOR | `+` |
 | IDENTIFIER | `a` |
@@ -142,15 +141,13 @@ Si existiera una palabra desconocida, el compilador la reportaría como **símbo
 
 ## 3. Análisis Sintáctico
 
-### 1.2.1. Generación de Árbol de Expresión
-
 La expresión se ha validado y convertido en un Árbol de Sintaxis Abstracta (AST), que representa su estructura operativa.
 
-**Notación Postfija intermedia:** `x 1 a + b c * + 3 + =`
+**Notación Postfija intermedia:** `x 1 a + b c * + 3 + :=`
 
 ```mermaid
 graph TD
-    N10(('='))
+    N10((':='))
     N0(['x'])
     N10 --> N0
     N9(('+'))
@@ -173,11 +170,41 @@ graph TD
     N10 --> N9
 ```
 
-### 1.2.2. Comprobación Sintáctica / Comprobación de Tipos
 
-**Error de sintaxis:** Error de sintaxis: Se esperaba operador ':=' pero se encontró DELIMITER (':')
+### 3.2. Comprobación Sintáctica / Comprobación de Tipos
 
-La secuencia de tokens no pudo ser validada completamente por la gramática.
+La secuencia de tokens es válida según la gramática. Se genera el siguiente árbol de derivación:
+
+```mermaid
+graph TD
+    n0['S'] --- n1['ID']
+    n0['S'] --- n3[':=']
+    n0['S'] --- n23['F']
+    n1['ID'] --- n2['x']
+    n23['F'] --- n12['F']
+    n23['F'] --- n24['+']
+    n23['F'] --- n25['I']
+    n12['F'] --- n7['F']
+    n12['F'] --- n13['+']
+    n12['F'] --- n14['I']
+    n25['I'] --- n26['NUM']
+    n7['F'] --- n4['I']
+    n7['F'] --- n8['+']
+    n7['F'] --- n9['I']
+    n14['I'] --- n18['G']
+    n26['NUM'] --- n27['3']
+    n4['I'] --- n5['NUM']
+    n9['I'] --- n10['ID']
+    n18['G'] --- n15['I']
+    n18['G'] --- n19['*']
+    n18['G'] --- n20['I']
+    n5['NUM'] --- n6['1']
+    n10['ID'] --- n11['a']
+    n15['I'] --- n16['ID']
+    n20['I'] --- n21['ID']
+    n16['ID'] --- n17['b']
+    n21['ID'] --- n22['c']
+```
 
 
 ## 4. Análisis Semántico
@@ -191,7 +218,7 @@ graph TD
     classDef error fill:#ffdddd,stroke:#d44,stroke-width:2px;
     classDef default fill:#ddffdd,stroke:#4d4,stroke-width:2px;
     classDef immediate fill:#ddddff,stroke:#44d,stroke-width:2px;
-    N10["<b>=</b><br/><i>boolean</i><br/>Modo: register"]:::default
+    N10["<b>:=</b><br/><i>integer</i><br/>Modo: direct"]:::default
     N0["<b>x</b><br/><i>integer</i><br/>Modo: direct<br/>Addr: 1000"]:::default
     N10 --> N0
     N9["<b>+</b><br/><i>integer</i><br/>Modo: register"]:::default
@@ -240,14 +267,13 @@ graph TD
 
 ### Resumen de Tipos en la Expresión
 
-- **boolean**: 1 ocurrencias
-- **integer**: 10 ocurrencias
+- **integer**: 11 ocurrencias
 
 
 ## 5. Síntesis (Generación de Código Intermedio)
 
 ### Notación Postfija (Polaca Inversa)
-`x 1 a + b c * + 3 + =`
+`x 1 a + b c * + 3 + :=`
 
 ### Tripletas
 La expresión se traduce en la siguiente secuencia de instrucciones de tres direcciones:
@@ -258,7 +284,7 @@ La expresión se traduce en la siguiente secuencia de instrucciones de tres dire
 |(1)| `*`     | `b`     | `c`     |
 |(2)| `+`     | `(0)`     | `(1)`     |
 |(3)| `+`     | `(2)`     | `3`     |
-|(4)| `=`     | `x`     | `(3)`     |
+|(4)| `:=`     | `x`     | `(3)`     |
 
 # Conclusión
 

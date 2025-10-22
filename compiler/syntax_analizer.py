@@ -114,8 +114,7 @@ class SyntaxAnalyzer:
 
     def _generate_markdown(self, root, postfix_tokens):
         """Genera el reporte Markdown con el diagrama Mermaid del AST."""
-        md = "### 1.2.1. Generación de Árbol de Expresión\n\n"
-        md += "La expresión se ha validado y convertido en un Árbol de Sintaxis Abstracta (AST), que representa su estructura operativa.\n\n"
+        md = "La expresión se ha validado y convertido en un Árbol de Sintaxis Abstracta (AST), que representa su estructura operativa.\n\n"
         md += f"**Notación Postfija intermedia:** `{' '.join(postfix_tokens)}`\n\n"
         md += "```mermaid\n"
         md += "graph TD\n"

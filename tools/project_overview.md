@@ -160,8 +160,7 @@ class IntermediateCodeGenerator:
         return left + right + [node.value]
 
     def _generate_markdown(self, postfix_list, triples_list):
-        md = "## 3. Representación Intermedia\n\n"
-        md += "### Notación Postfija (Polaca Inversa)\n"
+        md = "### Notación Postfija (Polaca Inversa)\n"
         md += f"`{' '.join(postfix_list)}`\n\n"
         md += "### Tripletas\n"
         md += "La expresión se traduce en la siguiente secuencia de instrucciones de tres direcciones:\n\n"
@@ -391,6 +390,7 @@ class CompilationPipeline:
         self.report += syntax_report + "\n"
 
         # 3.2 Comprobación Sintáctica (Árbol de Derivación)
+        self.report += "\n### 3.2. Comprobación Sintáctica / Comprobación de Tipos\n\n"
         print("Iniciando Fase 3.2: Comprobación Sintáctica...")
         sc_analizer = SyntacticChecking(syntax_tokens)
         parse_tree, sc_report = sc_analizer.analyze()
@@ -872,7 +872,7 @@ class TypeSystem:
         
         for op in operators:
             if op in TypeSystem.TYPE_COMPATIBILITY:
-                md += f"**Tabla de {op}**\n\n"
+                md += f"**Tabla de \{op}**\n\n"
                 md += "|          |"
                 
                 # Encabezado de columnas
@@ -938,7 +938,7 @@ class SyntacticChecking:
             return parse_tree, report
         except Exception as e:
             # Si hay error, generar un reporte de error
-            error_report = f"### 1.2.2. Comprobación Sintáctica / Comprobación de Tipos\n\n"
+            error_report = f"### 3.2. Comprobación Sintáctica / Comprobación de Tipos\n\n"
             error_report += f"**Error de sintaxis:** {str(e)}\n\n"
             error_report += "La secuencia de tokens no pudo ser validada completamente por la gramática.\n"
             return None, error_report
@@ -1067,8 +1067,7 @@ class SyntacticChecking:
         return node_i
 
     def _generate_markdown(self, root_node):
-        md = "### 1.2.2. Comprobación Sintáctica / Comprobación de Tipos\n\n"
-        md += "La secuencia de tokens es válida según la gramática. Se genera el siguiente árbol de derivación:\n\n"
+        md = "La secuencia de tokens es válida según la gramática. Se genera el siguiente árbol de derivación:\n\n"
         md += "```mermaid\n"
         md += "graph TD\n"
         
@@ -1205,8 +1204,7 @@ class SyntaxAnalyzer:
 
     def _generate_markdown(self, root, postfix_tokens):
         """Genera el reporte Markdown con el diagrama Mermaid del AST."""
-        md = "### 1.2.1. Generación de Árbol de Expresión\n\n"
-        md += "La expresión se ha validado y convertido en un Árbol de Sintaxis Abstracta (AST), que representa su estructura operativa.\n\n"
+        md = "La expresión se ha validado y convertido en un Árbol de Sintaxis Abstracta (AST), que representa su estructura operativa.\n\n"
         md += f"**Notación Postfija intermedia:** `{' '.join(postfix_tokens)}`\n\n"
         md += "```mermaid\n"
         md += "graph TD\n"
